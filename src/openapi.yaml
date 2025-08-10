@@ -1,15 +1,36 @@
 openapi: 3.0.3
 info:
   title: Gym Platform API
-  version: 0.1.0
-  description: API per palestre, piani, abbonamenti, prenotazioni e check-in (Milano
-    pilot).
+  version: 0.2.0
+  description: API per palestre, piani, abbonamenti, prenotazioni e partner portal.
 servers:
 - url: http://localhost:3000
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Plan:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        plan_type:
+          type: string
+        price_cents:
+          type: integer
+        duration_days:
+          type: integer
+        entries_total:
+          type: integer
 paths:
   /health:
     get:
-      summary: Health check
+      summary: Health
       responses:
         '200':
           description: OK
@@ -36,10 +57,10 @@ paths:
           type: string
       responses:
         '200':
-          description: Lista palestre
+          description: Lista
   /gyms/near/{gymId}:
     get:
-      summary: Cerca palestre attorno alla palestra indicata
+      summary: Palestre vicine a gymId
       parameters:
       - name: gymId
         in: path
@@ -51,14 +72,24 @@ paths:
         schema:
           type: integer
           default: 2000
-          minimum: 100
-          maximum: 20000
       responses:
         '200':
-          description: Lista palestre vicine (con metadati dell'origine)
+          description: Ok
+  /gyms/{id}:
+    get:
+      summary: Dettaglio palestra
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Ok
   /plans:
     get:
-      summary: Lista piani per palestra
+      summary: Piani per palestra
       parameters:
       - name: gym_id
         in: query
@@ -67,100 +98,52 @@ paths:
           type: integer
       responses:
         '200':
-          description: Piani attivi e visibili
+          description: Ok
   /subscriptions:
     post:
-      summary: Crea abbonamento (post pagamento)
+      summary: Crea abbonamento
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              properties:
-                user_id:
-                  type: integer
-                gym_id:
-                  type: integer
-                plan_id:
-                  type: integer
-                paid:
-                  type: boolean
-              required:
-              - user_id
-              - gym_id
-              - plan_id
       responses:
         '201':
-          description: Abbonamento creato
-  /subscriptions/{id}/freeze:
-    post:
-      summary: Aggiunge giorni di freeze
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                days:
-                  type: integer
-                  default: 7
-      responses:
-        '200':
-          description: Freeze applicato
+          description: Creato
   /bookings:
     post:
-      summary: Crea prenotazione e QR
+      summary: Crea prenotazione+QR
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              properties:
-                user_id:
-                  type: integer
-                gym_id:
-                  type: integer
-                subscription_id:
-                  type: integer
-                slot_id:
-                  type: integer
-              required:
-              - user_id
-              - gym_id
       responses:
         '201':
-          description: Booking creato con qr_token
+          description: Creato
   /checkin/verify:
     post:
-      summary: Verifica QR e registra check-in
+      summary: Verifica QR
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              properties:
-                qr_token:
-                  type: string
-                verifier_device_id:
-                  type: string
-              required:
-              - qr_token
       responses:
         '200':
-          description: Check-in OK
+          description: Ok
   /payments/webhook:
     post:
-      summary: Webhook pagamenti (stub)
+      summary: Webhook pagamenti
+      responses:
+        '200':
+          description: Ok
+  /auth/partner/login:
+    post:
+      summary: Login partner
       requestBody:
         required: true
         content:
@@ -168,71 +151,89 @@ paths:
             schema:
               type: object
               properties:
-                payment_id:
-                  type: integer
-                status:
+                email:
                   type: string
-                  enum:
-                  - paid
-                  - failed
-                  - refunded
-              required:
-              - payment_id
-              - status
+                password:
+                  type: string
       responses:
         '200':
-          description: Aggiornato
+          description: Ok
+  /partner/slots:
+    get:
+      summary: Slot per data (partner)
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: gym_id
+        in: query
+        required: true
+        schema:
+          type: integer
+      - name: date
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Ok
   /partner/slots/{id}:
     patch:
-      summary: Aggiorna slot lato partner
+      summary: Aggiorna slot (partner)
+      security:
+      - bearerAuth: []
       parameters:
       - name: id
         in: path
         required: true
         schema:
           type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                is_active:
-                  type: integer
-                capacity:
-                  type: integer
-                available:
-                  type: integer
       responses:
         '200':
-          description: Aggiornato
-  /gyms/{id}:
+          description: Ok
+  /partner/plans:
+    post:
+      summary: Crea piano (partner)
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: Creato
+  /partner/plans/{id}:
+    patch:
+      summary: Aggiorna piano (partner)
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Ok
+    delete:
+      summary: Elimina piano (partner)
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Ok
+  /partner/checkins:
     get:
-      summary: Dettaglio palestra (con sedi e piani attivi)
+      summary: Check-in giorno (partner)
+      security:
+      - bearerAuth: []
       parameters:
-      - name: id
-        in: path
+      - name: gym_id
+        in: query
         required: true
         schema:
           type: integer
+      - name: date
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: q
+        in: query
+        schema:
+          type: string
       responses:
         '200':
-          description: Dati della palestra
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  gym:
-                    type: object
-                  locations:
-                    type: array
-                    items:
-                      type: object
-                  plans:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Plan'
-        '404':
-          description: Gym non trovata
+          description: Ok

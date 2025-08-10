@@ -9,7 +9,6 @@ app.use(helmet());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Swagger docs
 setupSwagger(app);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
@@ -20,6 +19,7 @@ app.use('/subscriptions', require('./routes/subscriptions'));
 app.use('/bookings', require('./routes/bookings'));
 app.use('/checkin', require('./routes/checkin'));
 app.use('/payments', require('./routes/payments'));
+app.use('/auth', require('./routes/auth'));
 app.use('/partner', require('./routes/partner'));
 
 const port = process.env.PORT || 3000;
