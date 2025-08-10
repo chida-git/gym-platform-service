@@ -27,6 +27,77 @@ components:
           type: integer
         entries_total:
           type: integer
+    Gym:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    GymLocation:
+      type: object
+      properties:
+        id:
+          type: integer
+        address_line1:
+          type: string
+        zone_label:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        is_primary:
+          type: integer
+    Slot:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+        time_from:
+          type: string
+        time_to:
+          type: string
+        capacity:
+          type: integer
+        available:
+          type: integer
+        is_active:
+          type: integer
+    CheckinRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        used_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        user_name:
+          type: string
+        user_email:
+          type: string
+        plan_name:
+          type: string
+    AuthLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        partner:
+          type: object
 paths:
   /health:
     get:
@@ -87,6 +158,45 @@ paths:
       responses:
         '200':
           description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gym:
+                    $ref: '#/components/schemas/Gym'
+                  locations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GymLocation'
+                  plans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plan'
+              examples:
+                sample:
+                  value:
+                    gym:
+                      id: 1
+                      name: Milano Fit Isola
+                      email: isola@milfit.it
+                      phone: 02-000111
+                      status: active
+                      created_at: '2025-08-10T09:00:00Z'
+                    locations:
+                    - id: 10
+                      address_line1: Via Borsieri 12
+                      zone_label: Isola
+                      latitude: 45.4891
+                      longitude: 9.1899
+                      is_primary: 1
+                    plans:
+                    - id: 201
+                      name: Mensile
+                      plan_type: monthly
+                      price_cents: 4999
+                      currency: EUR
+                      duration_days: 30
   /plans:
     get:
       summary: Piani per palestra
@@ -99,6 +209,21 @@ paths:
       responses:
         '200':
           description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+              examples:
+                sample:
+                  value:
+                  - id: 201
+                    name: Mensile
+                    plan_type: monthly
+                    price_cents: 4999
+                    currency: EUR
+                    duration_days: 30
   /subscriptions:
     post:
       summary: Crea abbonamento
@@ -158,6 +283,19 @@ paths:
       responses:
         '200':
           description: Ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthLoginResponse'
+              examples:
+                sample:
+                  value:
+                    token: <jwt>
+                    partner:
+                      id: 1001
+                      gym_id: 1
+                      email: manager.isola@example.com
+                      role: admin
   /partner/slots:
     get:
       summary: Slot per data (partner)
@@ -177,6 +315,22 @@ paths:
       responses:
         '200':
           description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Slot'
+              examples:
+                sample:
+                  value:
+                  - id: 1
+                    date: '2025-08-10'
+                    time_from: 07:00:00
+                    time_to: 08:00:00
+                    capacity: 20
+                    available: 20
+                    is_active: 1
   /partner/slots/{id}:
     patch:
       summary: Aggiorna slot (partner)
@@ -237,3 +391,18 @@ paths:
       responses:
         '200':
           description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CheckinRow'
+              examples:
+                sample:
+                  value:
+                  - id: 555
+                    used_at: '2025-08-10T09:21:00Z'
+                    status: checked_in
+                    user_name: Mario Rossi
+                    user_email: mario.rossi@example.com
+                    plan_name: Mensile

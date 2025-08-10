@@ -6,7 +6,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "seed:dev": "node seed/dev-seed.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -19,7 +20,9 @@
     "swagger-ui-express": "^5.0.1",
     "js-yaml": "^4.1.0",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
