@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Gym Platform API
+  version: 0.1.0
+  description: API per palestre, piani, abbonamenti, prenotazioni e check-in (Milano
+    pilot).
+servers:
+- url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+  /gyms:
+    get:
+      summary: Cerca palestre
+      parameters:
+      - name: lat
+        in: query
+        schema:
+          type: number
+      - name: lon
+        in: query
+        schema:
+          type: number
+      - name: radius
+        in: query
+        schema:
+          type: integer
+          default: 2000
+      - name: zone
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Lista palestre
+  /plans:
+    get:
+      summary: Lista piani per palestra
+      parameters:
+      - name: gym_id
+        in: query
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Piani attivi e visibili
+  /subscriptions:
+    post:
+      summary: Crea abbonamento (post pagamento)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                gym_id:
+                  type: integer
+                plan_id:
+                  type: integer
+                paid:
+                  type: boolean
+              required:
+              - user_id
+              - gym_id
+              - plan_id
+      responses:
+        '201':
+          description: Abbonamento creato
+  /subscriptions/{id}/freeze:
+    post:
+      summary: Aggiunge giorni di freeze
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                days:
+                  type: integer
+                  default: 7
+      responses:
+        '200':
+          description: Freeze applicato
+  /bookings:
+    post:
+      summary: Crea prenotazione e QR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                gym_id:
+                  type: integer
+                subscription_id:
+                  type: integer
+                slot_id:
+                  type: integer
+              required:
+              - user_id
+              - gym_id
+      responses:
+        '201':
+          description: Booking creato con qr_token
+  /checkin/verify:
+    post:
+      summary: Verifica QR e registra check-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                qr_token:
+                  type: string
+                verifier_device_id:
+                  type: string
+              required:
+              - qr_token
+      responses:
+        '200':
+          description: Check-in OK
+  /payments/webhook:
+    post:
+      summary: Webhook pagamenti (stub)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_id:
+                  type: integer
+                status:
+                  type: string
+                  enum:
+                  - paid
+                  - failed
+                  - refunded
+              required:
+              - payment_id
+              - status
+      responses:
+        '200':
+          description: Aggiornato
+  /partner/slots/{id}:
+    patch:
+      summary: Aggiorna slot lato partner
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                is_active:
+                  type: integer
+                capacity:
+                  type: integer
+                available:
+                  type: integer
+      responses:
+        '200':
+          description: Aggiornato
+components:
+  schemas:
+    Plan:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        plan_type:
+          type: string
+          enum:
+          - monthly
+          - pack
+          - daypass
+          - trial
+          - annual
+        price_cents:
+          type: integer
+        duration_days:
+          type: integer
+        entries_total:
+          type: integer

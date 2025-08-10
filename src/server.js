@@ -3,10 +3,14 @@ const express = require('express');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const app = express();
+const { setupSwagger } = require('./swagger');
 
 app.use(helmet());
 app.use(express.json());
 app.use(morgan('dev'));
+
+// Swagger /docs
+setupSwagger(app);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
