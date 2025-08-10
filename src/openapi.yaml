@@ -37,6 +37,25 @@ paths:
       responses:
         '200':
           description: Lista palestre
+  /gyms/near/{gymId}:
+    get:
+      summary: Cerca palestre attorno alla palestra indicata
+      parameters:
+      - name: gymId
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: radius
+        in: query
+        schema:
+          type: integer
+          default: 2000
+          minimum: 100
+          maximum: 20000
+      responses:
+        '200':
+          description: Lista palestre vicine (con metadati dell'origine)
   /plans:
     get:
       summary: Lista piani per palestra
@@ -188,26 +207,32 @@ paths:
       responses:
         '200':
           description: Aggiornato
-components:
-  schemas:
-    Plan:
-      type: object
-      properties:
-        id:
+  /gyms/{id}:
+    get:
+      summary: Dettaglio palestra (con sedi e piani attivi)
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
           type: integer
-        name:
-          type: string
-        plan_type:
-          type: string
-          enum:
-          - monthly
-          - pack
-          - daypass
-          - trial
-          - annual
-        price_cents:
-          type: integer
-        duration_days:
-          type: integer
-        entries_total:
-          type: integer
+      responses:
+        '200':
+          description: Dati della palestra
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gym:
+                    type: object
+                  locations:
+                    type: array
+                    items:
+                      type: object
+                  plans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plan'
+        '404':
+          description: Gym non trovata

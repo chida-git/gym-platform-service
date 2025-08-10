@@ -1,4 +1,3 @@
-// src/swagger.js
 const path = require('path');
 const fs = require('fs');
 const yaml = require('js-yaml');

@@ -1,5 +1,4 @@
 const mysql = require('mysql2/promise');
-
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   port: +(process.env.DB_PORT || 3306),
@@ -9,5 +8,4 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: +(process.env.DB_POOL || 10)
 });
-
 module.exports = { pool };
