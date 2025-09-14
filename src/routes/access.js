@@ -51,17 +51,23 @@ router.post('/validate-user', async (req, res, next) => {
     if (!granted) return res.status(403).json({ granted: false, reason: 'Accesso negato' })
     if (!id_user) return res.status(502).json({ error: 'Validazione OK ma id_user mancante' })
 
-    // 3) ottieni utente dal servizio utenti (otoken = token_raw)
+    // dentro router.post('/validate-user', ...)
+    // 3) ottieni utente "light" dal servizio utenti
     const uResp = await axios.get(
-      `${USERS_BASE}/get_user`,
-      { params: { id_user, otoken: token_raw }, timeout: TIMEOUT }
+      `${USERS_BASE}/get_user_less`,
+      { params: { id_user }, timeout: TIMEOUT }
     )
+
+    // la risposta è un array del tipo:
+    // [ { name: "Davide", surname: "Rossi", mail: "..." } ]
+    const arr = Array.isArray(uResp.data) ? uResp.data : []
+    const userLess = arr[0] || null
 
     return res.json({
       granted: true,
       id_user,
       device_id,
-      user: uResp.data || null
+      user: userLess    // <- chiave 'user' compatibile col FE
     })
   } catch (e) {
     if (e.response) {
