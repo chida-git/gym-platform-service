@@ -3,6 +3,7 @@ const router = require('express').Router()
 const axios = require('axios')
 const Joi = require('joi')
 const { requireAuth } = require('../middleware/auth')
+const { pool } = require('../db')
 
 const DEVICES_BASE = process.env.DEVICES_BASE || 'http://127.0.0.1:3003'
 const ACCESS_BASE  = process.env.ACCESS_BASE  || 'http://127.0.0.1:3001'
