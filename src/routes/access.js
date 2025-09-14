@@ -53,10 +53,16 @@ router.post('/validate-user', async (req, res, next) => {
 
     // dentro router.post('/validate-user', ...)
     // 3) ottieni utente "light" dal servizio utenti
-    const uResp = await axios.get(
-      `${USERS_BASE}/get_user_less`,
-      { params: { id_user }, timeout: TIMEOUT }
-    )
+  const uResp = await axios.get(
+  `${USERS_BASE}/get_user_less`,
+  { params: { id_user }, timeout: TIMEOUT, responseType: 'json', transformResponse: [(data, headers) => {
+      const ct = headers?.['content-type'] || ''
+      if (ct.includes('text/html')) {
+        throw new Error('Upstream returned HTML instead of JSON')
+      }
+      try { return JSON.parse(data) } catch { return data }
+  }]}
+)
     console.log(uResp);
     // la risposta è un array del tipo:
     // [ { name: "Davide", surname: "Rossi", mail: "..." } ]
