@@ -92,4 +92,47 @@ router.post('/validate-user', async (req, res, next) => {
   }
 })
 
+router.get('/users/:id_user/full', async (req, res, next) => {
+  try {
+    const id_user = +req.params.id_user
+    if (!Number.isFinite(id_user)) return res.status(400).json({ error: 'id_user non valido' })
+
+    const gym_id = req.partner?.gym_id
+    if (!gym_id) return res.status(400).json({ error: 'Missing gym_id in token' })
+
+    // 1) User "light" dal servizio esterno
+    const uResp = await axios.get(`${USERS_BASE}/get_user_less`, {
+      params: { id_user }, timeout: TIMEOUT
+    })
+    const arr = Array.isArray(uResp.data) ? uResp.data : []
+    const user = arr[0] || null
+
+    // 2) Abbonamenti dell’utente per questa palestra (dal tuo DB)
+    //    - prendo il più recente per created_at / start_at
+    const [subs] = await pool.query(
+      `SELECT s.id, s.status, s.start_at, s.end_at, s.entries_remaining,
+              p.id AS plan_id, p.name AS plan_name, p.plan_type, p.price_cents, p.currency, p.duration_days, p.entries_total
+       FROM subscriptions s
+       JOIN plans p ON p.id = s.plan_id
+       WHERE s.user_id = ? AND s.gym_id = ?
+       ORDER BY s.created_at DESC
+       LIMIT 1`,
+      [id_user, gym_id]
+    )
+    const subscription = subs[0] || null
+
+    return res.json({ id_user, user, subscription })
+  } catch (e) {
+    if (e.response) {
+      return res.status(502).json({
+        error: 'Upstream error',
+        from: e.response?.config?.url,
+        status: e.response?.status,
+        data: e.response?.data
+      })
+    }
+    next(e)
+  }
+})
+
 module.exports = router
