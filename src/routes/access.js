@@ -57,7 +57,7 @@ router.post('/validate-user', async (req, res, next) => {
       `${USERS_BASE}/get_user_less`,
       { params: { id_user }, timeout: TIMEOUT }
     )
-
+    console.log(uResp);
     // la risposta è un array del tipo:
     // [ { name: "Davide", surname: "Rossi", mail: "..." } ]
     const arr = Array.isArray(uResp.data) ? uResp.data : []
