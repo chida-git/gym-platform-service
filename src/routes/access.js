@@ -36,6 +36,7 @@ router.post('/validate-user', async (req, res, next) => {
     )
     // supporta sia {device_id:'...'} che {id:'...'}
     const device_id = dResp.data?.device_id || dResp.data?.id
+    console.log(device_id)
     if (!device_id) {
       return res.status(502).json({ error: 'devices/by-gym: device_id assente', data: dResp.data })
     }
