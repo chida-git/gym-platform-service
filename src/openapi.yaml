@@ -406,3 +406,31 @@ paths:
                     user_name: Mario Rossi
                     user_email: mario.rossi@example.com
                     plan_name: Mensile
+/partner/access/validate-user:
+  post:
+    summary: Valida token e recupera profilo utente
+    security: [{ bearerAuth: [] }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              token_raw: { type: string }
+              device_id: { type: string }
+            required: [token_raw, device_id]
+    responses:
+      "200":
+        description: Ok
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                granted: { type: boolean }
+                id_user: { type: integer }
+                user: { type: object }
+      "403": { description: Accesso negato }
+      "502": { description: Errore servizi esterni }
+
