@@ -1,97 +1,158 @@
-const router = require('express').Router();
-const Joi = require('joi');
-const { pool } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const router = require('express').Router()
+const Joi = require('joi')
+const { pool } = require('../db')
+const { requireAuth } = require('../middleware/auth')
+const { publishSafe } = require('../mq')
 
-// Protect all /partner routes
-router.use(requireAuth);
+router.use(requireAuth)
 
-// PATCH /partner/slots/:id
-router.patch('/slots/:id', async (req, res, next) => {
-  try {
-    const id = +req.params.id;
-    const schema = Joi.object({ is_active: Joi.number().valid(0,1).optional(), capacity: Joi.number().min(0).optional(), available: Joi.number().min(0).optional() }).min(1);
-    const body = await schema.validateAsync(req.body);
-    const fields = []; const params = [];
-    for (const k of Object.keys(body)) { fields.push(`${k}=?`); params.push(body[k]); }
-    params.push(id);
-    const [r] = await pool.query(`UPDATE inventory_slots SET ${fields.join(', ')} WHERE id=?`, params);
-    res.json({ affectedRows: r.affectedRows });
-  } catch (e) { next(e); }
-});
-
-// GET /partner/slots?gym_id=&date=YYYY-MM-DD
-router.get('/slots', async (req, res, next) => {
-  try {
-    const schema = Joi.object({ gym_id: Joi.number().required(), date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required() });
-    const { gym_id, date } = await schema.validateAsync(req.query);
-    if (req.partner.gym_id !== gym_id) return res.status(403).json({ error: 'Forbidden' });
-    const [rows] = await pool.query(`SELECT id, date, time_from, time_to, capacity, available, is_active FROM inventory_slots WHERE gym_id=? AND date=? ORDER BY time_from ASC`, [gym_id, date]);
-    res.json(rows);
-  } catch (e) { next(e); }
-});
-
-// PATCH /partner/plans/:id
-router.patch('/plans/:id', async (req, res, next) => {
-  try {
-    const id = +req.params.id;
-    const schema = Joi.object({ price_cents: Joi.number().min(0).optional(), freeze_max_days: Joi.number().min(0).max(365).optional(), visible: Joi.number().valid(0,1).optional(), active: Joi.number().valid(0,1).optional() }).min(1);
-    const body = await schema.validateAsync(req.body);
-    const [[p]] = await pool.query('SELECT id, gym_id FROM plans WHERE id=?', [id]);
-    if (!p) return res.status(404).json({ error: 'Plan not found' });
-    if (p.gym_id !== req.partner.gym_id) return res.status(403).json({ error: 'Forbidden' });
-    const fields = []; const params = [];
-    for (const k of Object.keys(body)) { fields.push(`${k}=?`); params.push(body[k]); }
-    params.push(id);
-    const [r] = await pool.query(`UPDATE plans SET ${fields.join(', ')}, updated_at=NOW() WHERE id=?`, params);
-    res.json({ affectedRows: r.affectedRows });
-  } catch (e) { next(e); }
-});
-
-// POST /partner/plans
+// CREATE plan  → DB (tx) + eventi plan.upsert.* e price.upsert.*
 router.post('/plans', async (req, res, next) => {
+  const schema = Joi.object({
+    gym_id: Joi.number().required(),
+    name: Joi.string().max(180).required(),
+    plan_type: Joi.string().valid('monthly','pack','daypass','trial','annual').required(),
+    description: Joi.string().allow(null,'').optional(),
+    price_cents: Joi.number().min(0).required(),
+    currency: Joi.string().length(3).default('EUR'),
+    duration_days: Joi.number().allow(null),
+    entries_total: Joi.number().allow(null),
+    access_per_day: Joi.number().allow(null),
+    freeze_max_days: Joi.number().min(0).default(0),
+    visible: Joi.number().valid(0,1).default(1),
+    active: Joi.number().valid(0,1).default(1)
+  })
   try {
-    const schema = Joi.object({ gym_id: Joi.number().required(), name: Joi.string().max(180).required(), plan_type: Joi.string().valid('monthly','pack','daypass','trial','annual').required(), description: Joi.string().allow(null, '').optional(), price_cents: Joi.number().min(0).required(), currency: Joi.string().length(3).default('EUR'), duration_days: Joi.number().allow(null).optional(), entries_total: Joi.number().allow(null).optional(), access_per_day: Joi.number().allow(null).optional(), freeze_max_days: Joi.number().min(0).default(0), visible: Joi.number().valid(0,1).default(1), active: Joi.number().valid(0,1).default(1) });
-    const input = await schema.validateAsync(req.body, { stripUnknown: true });
-    if (input.gym_id !== req.partner.gym_id) return res.status(403).json({ error: 'Forbidden' });
-    const [ins] = await pool.query(`INSERT INTO plans (gym_id, name, plan_type, description, price_cents, currency, duration_days, entries_total, access_per_day, freeze_max_days, visible, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`, [input.gym_id, input.name, input.plan_type, input.description || null, input.price_cents, input.currency, input.duration_days || null, input.entries_total || null, input.access_per_day || null, input.freeze_max_days, input.visible, input.active]);
-    res.status(201).json({ id: ins.insertId });
-  } catch (e) { next(e); }
-});
+    const input = await schema.validateAsync(req.body, { stripUnknown: true })
+    if (input.gym_id !== req.partner.gym_id) return res.status(403).json({ error: 'Forbidden' })
 
-// DELETE /partner/plans/:id
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+      const [ins] = await conn.query(
+        `INSERT INTO plans (gym_id, name, plan_type, description, price_cents, currency, duration_days, entries_total, access_per_day, freeze_max_days, visible, active, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [input.gym_id, input.name, input.plan_type, input.description || null, input.price_cents, input.currency,
+         input.duration_days || null, input.entries_total || null, input.access_per_day || null, input.freeze_max_days, input.visible, input.active]
+      )
+      const planId = ins.insertId
+
+      // storico prezzi
+      await conn.query(
+        `INSERT INTO price_history (plan_id, gym_id, old_price_cents, new_price_cents, currency, changed_by)
+         VALUES (?, ?, NULL, ?, ?, ?)`,
+        [planId, input.gym_id, input.price_cents, input.currency || 'EUR', req.partner.id]
+      )
+
+      await conn.commit()
+      res.status(201).json({ id: planId })
+
+      // PUBLISH dopo il commit
+      const ts = new Date().toISOString()
+      publishSafe(`plan.upsert.${input.gym_id}`, {
+        event: 'plan.upsert', plan_id: planId, gym_id: input.gym_id,
+        name: input.name, plan_type: input.plan_type, visible: input.visible, active: input.active, ts
+      }).catch(()=>{})
+      publishSafe(`price.upsert.${input.gym_id}`, {
+        event: 'price.upsert', plan_id: planId, gym_id: input.gym_id,
+        price_cents: input.price_cents, currency: input.currency || 'EUR',
+        public: !!input.visible && !!input.active, ts
+      }).catch(()=>{})
+    } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
+  } catch (e) { next(e) }
+})
+
+// UPDATE plan → DB (tx) + evento plan.upsert.* e/o price.upsert.*|price.archive.*
+router.patch('/plans/:id', async (req, res, next) => {
+  const schema = Joi.object({
+    price_cents: Joi.number().min(0),
+    currency: Joi.string().length(3),
+    freeze_max_days: Joi.number().min(0).max(365),
+    visible: Joi.number().valid(0,1),
+    active: Joi.number().valid(0,1),
+    name: Joi.string().max(180),
+    plan_type: Joi.string().valid('monthly','pack','daypass','trial','annual')
+  }).min(1)
+  try {
+    const id = +req.params.id
+    const body = await schema.validateAsync(req.body, { stripUnknown: true })
+
+    const conn = await pool.getConnection()
+    try {
+      await conn.beginTransaction()
+
+      // blocco il piano
+      const [[prev]] = await conn.query('SELECT * FROM plans WHERE id=? FOR UPDATE', [id])
+      if (!prev) { await conn.rollback(); return res.status(404).json({ error: 'Plan not found' }) }
+      if (prev.gym_id !== req.partner.gym_id) { await conn.rollback(); return res.status(403).json({ error: 'Forbidden' }) }
+
+      // costruisci update
+      const fields = [], params = []
+      for (const k of Object.keys(body)) { fields.push(`${k}=?`); params.push(body[k]) }
+      params.push(id)
+
+      if (fields.length) {
+        await conn.query(`UPDATE plans SET ${fields.join(', ')}, updated_at=NOW() WHERE id=?`, params)
+      }
+
+      // storico prezzo se è cambiato
+      const priceChanged = Object.prototype.hasOwnProperty.call(body, 'price_cents') || Object.prototype.hasOwnProperty.call(body, 'currency')
+      let newPrice = prev.price_cents, newCurr = prev.currency
+      if (priceChanged) {
+        newPrice = body.price_cents ?? prev.price_cents
+        newCurr  = body.currency ?? prev.currency
+        await conn.query(
+          `INSERT INTO price_history (plan_id, gym_id, old_price_cents, new_price_cents, currency, changed_by)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [id, prev.gym_id, prev.price_cents, newPrice, newCurr, req.partner.id]
+        )
+      }
+
+      await conn.commit()
+      res.json({ affectedRows: 1 })
+
+      // PUBLISH dopo commit
+      const [[p2]] = await pool.query('SELECT id, gym_id, name, plan_type, price_cents, currency, visible, active FROM plans WHERE id=?', [id])
+      if (!p2) return
+
+      const ts = new Date().toISOString()
+      const touched = Object.keys(body)
+      const priceTouched = touched.some(k => ['price_cents','currency','visible','active'].includes(k))
+      const planTouched  = touched.some(k => ['name','plan_type','visible','active'].includes(k))
+
+      if (planTouched) {
+        publishSafe(`plan.upsert.${p2.gym_id}`, {
+          event: 'plan.upsert', plan_id: p2.id, gym_id: p2.gym_id,
+          name: p2.name, plan_type: p2.plan_type, visible: p2.visible, active: p2.active, ts
+        }).catch(()=>{})
+      }
+
+      if (priceTouched) {
+        const isArchived = (p2.visible == 0) || (p2.active == 0)
+        const key = isArchived ? 'price.archive' : 'price.upsert'
+        publishSafe(`${key}.${p2.gym_id}`, {
+          event: key, plan_id: p2.id, gym_id: p2.gym_id,
+          price_cents: p2.price_cents, currency: p2.currency || 'EUR',
+          public: !isArchived, ts
+        }).catch(()=>{})
+      }
+    } catch (e) { await conn.rollback(); throw e } finally { conn.release() }
+  } catch (e) { next(e) }
+})
+
+// DELETE plan → DB + eventi plan.archive.* e price.archive.*
 router.delete('/plans/:id', async (req, res, next) => {
   try {
-    const id = +req.params.id;
-    const [[p]] = await pool.query('SELECT id, gym_id FROM plans WHERE id=?', [id]);
-    if (!p) return res.status(404).json({ error: 'Plan not found' });
-    if (p.gym_id !== req.partner.gym_id) return res.status(403).json({ error: 'Forbidden' });
-    const [r] = await pool.query('DELETE FROM plans WHERE id=?', [id]);
-    res.json({ affectedRows: r.affectedRows });
-  } catch (e) { next(e); }
-});
+    const id = +req.params.id
+    const [[p]] = await pool.query('SELECT id, gym_id FROM plans WHERE id=?', [id])
+    if (!p) return res.status(404).json({ error: 'Plan not found' })
+    if (p.gym_id !== req.partner.gym_id) return res.status(403).json({ error: 'Forbidden' })
 
-// GET /partner/checkins?gym_id=&date=&q=
-router.get('/checkins', async (req, res, next) => {
-  try {
-    const schema = Joi.object({ gym_id: Joi.number().required(), date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required(), q: Joi.string().max(120).optional() });
-    const { gym_id, date, q } = await schema.validateAsync(req.query);
-    if (req.partner.gym_id !== gym_id) return res.status(403).json({ error: 'Forbidden' });
-    const like = q ? `%${q}%` : null;
-    const params = [gym_id, gym_id, date];
-    let whereQ = '';
-    if (like) { whereQ = ' AND (u.full_name LIKE ? OR u.email LIKE ?) '; params.push(like, like); }
-    const sql = `SELECT c.id, c.used_at, b.status, u.full_name AS user_name, u.email AS user_email, p.name AS plan_name
-                 FROM checkins c
-                 LEFT JOIN bookings b ON b.id = c.booking_id
-                 LEFT JOIN subscriptions s ON s.id = c.subscription_id
-                 LEFT JOIN users u ON u.id = s.user_id
-                 LEFT JOIN plans p ON p.id = s.plan_id
-                 WHERE (b.gym_id = ? OR s.gym_id = ?) AND DATE(c.used_at) = ? ${whereQ}
-                 ORDER BY c.used_at DESC LIMIT 500`;
-    const [rows] = await pool.query(sql, params);
-    res.json(rows);
-  } catch (e) { next(e); }
-});
+    const [r] = await pool.query('DELETE FROM plans WHERE id=?', [id])
+    res.json({ affectedRows: r.affectedRows })
 
-module.exports = router;
+    const ts = new Date().toISOString()
+    publishSafe(`plan.archive.${p.gym_id}`, { event: 'plan.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
+    publishSafe(`price.archive.${p.gym_id}`, { event: 'price.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
+  } catch (e) { next(e) }
+})
