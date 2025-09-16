@@ -22,7 +22,10 @@ async function ensure() {
 
 async function publish(routingKey, payload) {
   const channel = await ensure()
+  console.log(channel)
   const body = Buffer.from(JSON.stringify(payload))
+  console.log(body)
+  console.log(exchange, routingKey)
   await channel.publish(exchange, routingKey, body, { persistent: true })
   // wait for broker acks (confirm channel)
   await channel.waitForConfirms()
