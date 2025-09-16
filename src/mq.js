@@ -6,9 +6,12 @@ const url = process.env.RABBIT_URL || 'amqp://localhost'
 const exchange = process.env.RABBIT_EXCHANGE || 'gymspot.events'
 
 async function connect() {
+    console.log(exchange)
   conn = await amqp.connect(url)
+  console.log(url)
   conn.on('close', () => { ready = false; setTimeout(connect, 2000) })
   conn.on('error', () => {}) // già gestita
+  console.log(".10")
   ch = await conn.createConfirmChannel()
   await ch.assertExchange(exchange, 'topic', { durable: true })
   ready = true
