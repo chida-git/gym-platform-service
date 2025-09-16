@@ -122,7 +122,8 @@ router.patch('/plans/:id', async (req, res, next) => {
       await conn.commit()
       res.json({ affectedRows: 1 })
       console.log(".1")
-      const [[p2]] = await pool.query('SELECT id, gym_id, name, plan_type, price_cents, currency, visible, active FROM plans WHERE gym_id=?', [id])
+      console.log(params)
+      const [[p2]] = await pool.query('SELECT id, gym_id, name, plan_type, price_cents, currency, visible, active FROM plans WHERE id=?', params)
       if (!p2) return
 console.log(".2")
       const ts = new Date().toISOString()
