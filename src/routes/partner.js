@@ -88,7 +88,7 @@ router.patch('/plans/:id', async (req, res, next) => {
   try {
     const id = +req.params.id
     const body = await schema.validateAsync(req.body, { stripUnknown: true })
-
+console.log(req.body)
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
