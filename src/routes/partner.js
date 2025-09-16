@@ -2,7 +2,7 @@ const router = require('express').Router()
 const Joi = require('joi')
 const { pool } = require('../db')
 const { requireAuth } = require('../middleware/auth')
-const { publishSafe } = require('../mq')  // <-- usa publishSafe
+const { publish } = require('../mq')  // <-- usa publishSafe
 
 router.use(requireAuth)
 
