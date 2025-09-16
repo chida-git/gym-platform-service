@@ -6,16 +6,26 @@ const url = process.env.RABBIT_URL || 'amqp://localhost'
 const exchange = process.env.RABBIT_EXCHANGE || 'gymspot.events'
 
 async function connect() {
-    console.log("exchange", exchange)
-      console.log("url", url)
-  conn = await amqp.connect(url)
-  conn.on('close', () => { ready = false; setTimeout(connect, 2000) })
-  conn.on('error', () => {}) // già gestita
-  console.log(".10")
-  ch = await conn.createConfirmChannel()
-  await ch.assertExchange(exchange, 'topic', { durable: true })
-  ready = true
-  return ch
+  // timeout manuale di protezione in caso di socket bloccato
+  const guard = new Promise((_, rej) => setTimeout(() => rej(new Error('AMQP connect timeout')), connTimeout + 1000))
+  try {
+    const c = await Promise.race([
+      amqp.connect(url, { timeout: connTimeout }), // socket timeout lato amqplib
+      guard
+    ])
+    conn = c
+    conn.on('close', (e) => { ready = false; console.warn('[AMQP] close:', e?.message || e); reconnectLoop() })
+    conn.on('error', (e) => { console.error('[AMQP] error:', e?.message || e) })
+    ch = await conn.createConfirmChannel()
+    await ch.assertExchange(exchange, 'topic', { durable: true })
+    ready = true
+    console.log('[AMQP] connected, exchange ready:', exchange)
+    return ch
+  } catch (e) {
+    ready = false
+    console.error('[AMQP] connect failed:', e?.message || e)
+    throw e
+  }
 }
 
 async function ensure() {
