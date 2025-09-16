@@ -123,6 +123,7 @@ console.log(req.body)
       res.json({ affectedRows: 1 })
       console.log(".1")
       console.log(params)
+      console.log(id)
       const [[p2]] = await pool.query('SELECT id, gym_id, name, plan_type, price_cents, currency, visible, active FROM plans WHERE id=?', params)
       if (!p2) return
 console.log(".2")
