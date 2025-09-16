@@ -133,6 +133,7 @@ console.log(".2")
       const priceTouched = touched.some(k => ['price_cents','currency','visible','active'].includes(k))
       const planTouched  = touched.some(k => ['name','plan_type','visible','active'].includes(k))
 console.log(".3")
+console.log(planTouched)
       if (planTouched) {
         publish(`plan.upsert.${p2.gym_id}`, {
           event: 'plan.upsert', plan_id: p2.id, gym_id: p2.gym_id,
