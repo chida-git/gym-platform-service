@@ -2,7 +2,7 @@ const router = require('express').Router()
 const Joi = require('joi')
 const { pool } = require('../db')
 const { requireAuth } = require('../middleware/auth')
-const { publish } = require('../mq')  // <-- usa publishSafe
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 router.use(requireAuth)
 
@@ -54,12 +54,12 @@ router.post('/plans', async (req, res, next) => {
 
       // PUBLISH dopo commit (non blocca la risposta)
       const ts = new Date().toISOString()
-      publish(`plan.upsert.${input.gym_id}`, {
+      publishSafe(`plan.upsert.${input.gym_id}`, {
         event: 'plan.upsert', plan_id: planId, gym_id: input.gym_id,
         name: input.name, plan_type: input.plan_type, visible: input.visible, active: input.active, ts
       }).catch(()=>{})
 
-      publish(`price.upsert.${input.gym_id}`, {
+      publishSafe(`price.upsert.${input.gym_id}`, {
         event: 'price.upsert', plan_id: planId, gym_id: input.gym_id,
         price_cents: input.price_cents, currency: input.currency || 'EUR',
         public: !!input.visible && !!input.active, ts
@@ -135,7 +135,7 @@ console.log(".2")
 console.log(".3")
 console.log(planTouched)
       if (planTouched) {
-        publish(`plan.upsert.${p2.gym_id}`, {
+        publishSafe(`plan.upsert.${p2.gym_id}`, {
           event: 'plan.upsert', plan_id: p2.id, gym_id: p2.gym_id,
           name: p2.name, plan_type: p2.plan_type, visible: p2.visible, active: p2.active, ts
         }).catch(()=>{})
@@ -144,7 +144,7 @@ console.log(planTouched)
       if (priceTouched) {
         const isArchived = (p2.visible == 0) || (p2.active == 0)
         const key = isArchived ? 'price.archive' : 'price.upsert'
-        publish(`${key}.${p2.gym_id}`, {
+        publishSafe(`${key}.${p2.gym_id}`, {
           event: key, plan_id: p2.id, gym_id: p2.gym_id,
           price_cents: p2.price_cents, currency: p2.currency || 'EUR',
           public: !isArchived, ts
@@ -172,8 +172,8 @@ router.delete('/plans/:id', async (req, res, next) => {
     res.json({ affectedRows: r.affectedRows })
 
     const ts = new Date().toISOString()
-    publish(`plan.archive.${p.gym_id}`, { event: 'plan.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
-    publish(`price.archive.${p.gym_id}`, { event: 'price.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
+    publishSafe(`plan.archive.${p.gym_id}`, { event: 'plan.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
+    publishSafe(`price.archive.${p.gym_id}`, { event: 'price.archive', plan_id: id, gym_id: p.gym_id, ts }).catch(()=>{})
   } catch (e) { next(e) }
 })
 
