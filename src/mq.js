@@ -19,6 +19,8 @@ const CONN_TO   = +(process.env.RABBIT_CONN_TIMEOUT || 8000);
 const EXCHANGE  = process.env.CATALOG_EXCHANGE || process.env.RABBIT_EXCHANGE || 'gym.catalog';
 const DLX       = process.env.DLX_EXCHANGE || 'gym.catalog.dlx';
 const QUEUE     = process.env.CATALOG_QUEUE || 'fe-catalog-consumer';
+const DLQ_RK    = process.env.DLX_ROUTING_KEY || 'dlq';
+const DLQ_QUEUE = process.env.DLQ_QUEUE || `${QUEUE}.dlq`;
 
 // --- URL robusto ---
 function buildUrl() {
@@ -43,13 +45,26 @@ async function connectWithTimeout() {
 }
 
 async function setupTopology(channel) {
+  // exchanges
   await channel.assertExchange(EXCHANGE, 'topic', { durable: true });
-  await channel.assertExchange(DLX, 'topic', { durable: true });
-  await channel.assertQueue(QUEUE, { durable: true, deadLetterExchange: DLX });
+  await channel.assertExchange(DLX,      'topic', { durable: true });
+
+  // coda principale (deve combaciare con quella già creata => includi DLX + DLQ_RK)
+  await channel.assertQueue(QUEUE, {
+    durable: true,
+    deadLetterExchange: DLX,
+    deadLetterRoutingKey: DLQ_RK,
+  });
+
+  // binding verso l'exchange "catalog"
   await channel.bindQueue(QUEUE, EXCHANGE, 'plan.upsert.*');
   await channel.bindQueue(QUEUE, EXCHANGE, 'plan.archive.*');
   await channel.bindQueue(QUEUE, EXCHANGE, 'price.upsert.*');
   await channel.bindQueue(QUEUE, EXCHANGE, 'price.archive.*');
+
+  // DLQ fisica per raccogliere i messaggi scartati
+  await channel.assertQueue(DLQ_QUEUE, { durable: true });
+  await channel.bindQueue(DLQ_QUEUE, DLX, DLQ_RK);
 }
 
 async function connect() {
