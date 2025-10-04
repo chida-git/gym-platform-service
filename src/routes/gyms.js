@@ -1,6 +1,60 @@
 const router = require('express').Router();
 const Joi = require('joi');
 const { pool } = require('../db');
+const multer = require('multer');
+const path = require('path');
+const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 }, // 10MB, max 10 file
+  fileFilter: (_req, file, cb) => {
+    const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.mimetype);
+    cb(ok ? null : new Error('Formato non supportato (usa jpg/png/webp/avif)'), ok);
+  }
+});
+
+router.post('/:gymId/presentation/images', upload.array('images', 10), async (req, res, next) => {
+  try {
+    const bucket = process.env.S3_BUCKET;
+    const { gymId } = req.params;
+    if (!/^\d+$/.test(gymId)) return res.status(400).json({ error: 'gymId non valido' });
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Nessun file caricato' });
+
+    // "Creare la cartella": su S3 è un prefix. Caricando con quel Key, la "cartella" esiste.
+    const prefix = `gyms/${gymId}/gym_presentation/`;
+
+    const results = [];
+    for (const f of req.files) {
+      // mantieni il nome, o rinomina se vuoi forzare index/marker
+      const safeName = f.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const key = prefix + safeName;
+
+      await uploadBuffer({
+        Bucket: bucket,
+        Key: key,
+        Body: f.buffer,
+        ContentType: f.mimetype,
+        CacheControl: 'public, max-age=31536000, immutable'
+      });
+
+      const publicBase = process.env.S3_PUBLIC_BASE;
+      results.push({
+        key,
+        url: publicBase ? `${publicBase}/${key}` : undefined,
+        size: f.size,
+        contentType: f.mimetype
+      });
+    }
+
+    res.json({ ok: true, uploaded: results });
+  } catch (e) {
+    if (e.message && e.message.includes('Formato non supportato')) {
+      return res.status(415).json({ error: e.message });
+    }
+    next(e);
+  }
+});
 
 router.get('/', async (req, res, next) => {
   try {

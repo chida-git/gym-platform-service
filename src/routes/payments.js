@@ -1,1 +1,10 @@
-const router = require('express').Router(); const { pool } = require('../db'); router.post('/webhook', async (req,res,next)=>{ try{ const {payment_id,status}=req.body||{}; if(!payment_id||!status)return res.status(400).json({error:'payment_id and status required'}); await pool.query('UPDATE payments SET status=?, paid_at=IF(?="paid", NOW(), paid_at) WHERE id=?',[status,status,payment_id]); res.json({ok:true}); }catch(e){next(e)} }); module.exports=router;
+const router = require('express').Router(); 
+const { pool } = require('../db'); 
+
+router.post('/webhook', async (req,res,next)=>{ try{ const {payment_id,status}=req.body||{}; 
+
+if(!payment_id||!status)return res.status(400).json({error:'payment_id and status required'}); 
+
+await pool.query('UPDATE payments SET status=?, paid_at=IF(?="paid", NOW(), paid_at) WHERE id=?',[status,status,payment_id]); res.json({ok:true}); }catch(e){next(e)} }); 
+
+module.exports=router;
