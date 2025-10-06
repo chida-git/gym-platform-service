@@ -5,6 +5,18 @@ const multer = require('multer');
 const path = require('path');
 const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
 
+function isValidId(x) { return /^\d+$/.test(String(x)); }
+function sanitizeName(name) { return String(name).replace(/[^a-zA-Z0-9._-]/g, '_'); }
+
+function buildPublicUrl(key) {
+  const base = process.env.S3_PUBLIC_BASE; // es. https://my-cdn.example.com
+  return base ? `${base}/${key}` : undefined;
+}
+
+async function uploadBuffer({ Bucket, Key, Body, ContentType, CacheControl }) {
+  return s3.putObject({ Bucket, Key, Body, ContentType, CacheControl }).promise();
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 10 }, // 10MB, max 10 file
@@ -14,45 +26,181 @@ const upload = multer({
   }
 });
 
-router.post('/:gymId/presentation/images', upload.array('images', 10), async (req, res, next) => {
+/**
+ * LISTA IMMAGINI
+ * GET /:gymId/presentation/images?limit=10&token=<ContinuationToken>
+ * - limit: MaxKeys S3 (default 10)
+ * - token: ContinuationToken per paginazione
+ */
+router.get('/:gymId/presentation/images', async (req, res, next) => {
   try {
     const bucket = process.env.S3_BUCKET;
     const { gymId } = req.params;
-    if (!/^\d+$/.test(gymId)) return res.status(400).json({ error: 'gymId non valido' });
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Nessun file caricato' });
+    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
 
-    // "Creare la cartella": su S3 è un prefix. Caricando con quel Key, la "cartella" esiste.
+    const limit = Math.min(parseInt(req.query.limit || '10', 10) || 10, 1000);
+    const continuationToken = req.query.token || undefined;
+
     const prefix = `gyms/${gymId}/gym_presentation/`;
 
-    const results = [];
-    for (const f of req.files) {
-      // mantieni il nome, o rinomina se vuoi forzare index/marker
-      const safeName = f.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const key = prefix + safeName;
+    const listed = await s3.listObjectsV2({
+      Bucket: bucket,
+      Prefix: prefix,
+      MaxKeys: limit,
+      ContinuationToken: continuationToken
+    }).promise();
 
-      await uploadBuffer({
-        Bucket: bucket,
-        Key: key,
-        Body: f.buffer,
-        ContentType: f.mimetype,
-        CacheControl: 'public, max-age=31536000, immutable'
-      });
-
-      const publicBase = process.env.S3_PUBLIC_BASE;
-      results.push({
+    // tieni solo i file immagine
+    const items = (listed.Contents || [])
+      .map(o => o.Key)
+      .filter(k => /\.(jpe?g|png|gif|webp|avif)$/i.test(k))
+      .map(key => ({
         key,
-        url: publicBase ? `${publicBase}/${key}` : undefined,
-        size: f.size,
-        contentType: f.mimetype
-      });
+        filename: key.substring(prefix.length),
+        url: buildPublicUrl(key)
+      }));
+
+    return res.json({
+      ok: true,
+      items,
+      count: items.length,
+      nextToken: listed.IsTruncated ? listed.NextContinuationToken : null
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * CANCELLA IMMAGINE
+ * DELETE /:gymId/presentation/images/:filename
+ */
+router.delete('/:gymId/presentation/images/:filename', async (req, res, next) => {
+  try {
+    const bucket = process.env.S3_BUCKET;
+    const { gymId, filename } = req.params;
+
+    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
+    if (!filename) return res.status(400).json({ error: 'filename mancante' });
+
+    // evita path traversal
+    const safeFilename = sanitizeName(path.basename(filename));
+    const key = `gyms/${gymId}/gym_presentation/${safeFilename}`;
+
+    await s3.deleteObject({ Bucket: bucket, Key: key }).promise();
+
+    return res.json({ ok: true, deleted: { key, filename: safeFilename } });
+  } catch (err) {
+    if (err.code === 'NoSuchKey') {
+      return res.status(404).json({ error: 'Immagine non trovata' });
+    }
+    next(err);
+  }
+});
+
+/**
+ * GET index (cerca index.jpeg poi index.jpg)
+ * Esempio: GET /1/presentation/index
+ */
+router.get('/:gymId/presentation/index', async (req, res, next) => {
+  try {
+    const bucket = process.env.S3_BUCKET;
+    const { gymId } = req.params;
+    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
+
+    const baseKey = `gyms/${gymId}/index`;
+    const tryKeys = [`${baseKey}.jpeg`, `${baseKey}.jpg`];
+
+    let data = null;
+    let foundKey = null;
+
+    for (const Key of tryKeys) {
+      try {
+        data = await s3.getObject({ Bucket: bucket, Key }).promise();
+        foundKey = Key;
+        break;
+      } catch (e) {
+        if (e.code !== 'NoSuchKey' && e.statusCode !== 404) throw e;
+      }
     }
 
-    res.json({ ok: true, uploaded: results });
-  } catch (e) {
-    if (e.message && e.message.includes('Formato non supportato')) {
-      return res.status(415).json({ error: e.message });
+    if (!data) return res.status(404).json({ error: 'index non trovato' });
+
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    // opzionale: ETag/Last-Modified da S3
+    if (data.ETag) res.set('ETag', data.ETag);
+    if (data.LastModified) res.set('Last-Modified', data.LastModified.toUTCString());
+
+    return res.send(data.Body);
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+/**
+ * PUT index (upload e overwrite)
+ * - accetta 1 file multipart col campo "image"
+ * - crea/sovrascrive:
+ *   gyms/{gymId}/index.jpeg  (500x500)
+ *   gyms/{gymId}/marker.jpeg (100x100)
+ *
+ * Esempio: PUT /1/presentation/index
+ */
+router.put('/:gymId/presentation/index', upload.single('image'), async (req, res, next) => {
+  try {
+    const bucket = process.env.S3_BUCKET;
+    const { gymId } = req.params;
+    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
+    if (!req.file) return res.status(400).json({ error: 'Nessun file caricato' });
+
+    // accettiamo solo immagini
+    if (!/^image\//i.test(req.file.mimetype)) {
+      return res.status(415).json({ error: 'Formato non supportato' });
     }
-    next(e);
+
+    const base = `gyms/${gymId}`;
+    const jpegOpts = { quality: 85, mozjpeg: true };
+
+    // genera versioni
+    const index500 = await sharp(req.file.buffer)
+      .resize(500, 500, { fit: 'cover' })
+      .jpeg(jpegOpts)
+      .toBuffer();
+
+    const marker100 = await sharp(req.file.buffer)
+      .resize(100, 100, { fit: 'cover' })
+      .jpeg(jpegOpts)
+      .toBuffer();
+
+    // upload (overwrite)
+    await Promise.all([
+      uploadBuffer({
+        Bucket: bucket,
+        Key: `${base}/index.jpeg`,
+        Body: index500,
+        ContentType: 'image/jpeg',
+        CacheControl: 'public, max-age=31536000, immutable'
+      }),
+      uploadBuffer({
+        Bucket: bucket,
+        Key: `${base}/marker.jpeg`,
+        Body: marker100,
+        ContentType: 'image/jpeg',
+        CacheControl: 'public, max-age=31536000, immutable'
+      })
+    ]);
+
+    return res.json({
+      ok: true,
+      updated: [
+        { key: `${base}/index.jpeg`, size: index500.length },
+        { key: `${base}/marker.jpeg`, size: marker100.length }
+      ]
+    });
+  } catch (err) {
+    next(err);
   }
 });
 
