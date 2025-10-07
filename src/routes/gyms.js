@@ -3,7 +3,7 @@ const Joi = require('joi');
 const { pool } = require('../db');
 const multer = require('multer');
 const path = require('path');
-const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
+//const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
 
 function isValidId(x) { return /^\d+$/.test(String(x)); }
 function sanitizeName(name) { return String(name).replace(/[^a-zA-Z0-9._-]/g, '_'); }
