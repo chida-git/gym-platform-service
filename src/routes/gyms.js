@@ -5,7 +5,6 @@ const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
 const sharp = require('sharp'); // lo usi già per l'index
-const AWS = require('aws-sdk');
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION,          // es: 'eu-central-1'
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
