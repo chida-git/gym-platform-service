@@ -3,6 +3,9 @@ const Joi = require('joi');
 const { pool } = require('../db');
 const multer = require('multer');
 const path = require('path');
+const AWS = require('aws-sdk');
+const sharp = require('sharp'); // lo usi già per l'index
+const s3 = new AWS.S3();
 //const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
 
 function isValidId(x) { return /^\d+$/.test(String(x)); }
@@ -23,6 +26,54 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.mimetype);
     cb(ok ? null : new Error('Formato non supportato (usa jpg/png/webp/avif)'), ok);
+  }
+});
+
+/**
+ * UPLOAD immagini presentazione (max 10)
+ * POST /:gymId/presentation/images
+ * Body (multipart/form-data):
+ *   images: File  <-- ripetibile fino a 10 volte
+ */
+router.post('/:gymId/presentation/images', upload.array('images', 10), async (req, res, next) => {
+  try {
+    const bucket = process.env.S3_BUCKET;
+    const { gymId } = req.params;
+
+    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Nessun file caricato' });
+
+    const prefix = `gyms/${gymId}/gym_presentation/`;
+
+    const uploaded = [];
+    for (const f of req.files) {
+      const safeName = sanitizeName(f.originalname); // mantiene il nome (sanificato)
+      const Key = `${prefix}${safeName}`;
+
+      await s3.putObject({
+        Bucket: bucket,
+        Key,
+        Body: f.buffer,
+        ContentType: f.mimetype,
+        CacheControl: 'public, max-age=31536000, immutable'
+      }).promise();
+
+      uploaded.push({
+        key: Key,
+        filename: safeName,
+        size: f.size,
+        contentType: f.mimetype,
+        url: buildPublicUrl(Key) // se usi un CDN/public base
+      });
+    }
+
+    return res.json({ ok: true, count: uploaded.length, uploaded });
+  } catch (err) {
+    // gestisce errori di fileFilter (formato non supportato)
+    if (err && /Formato non supportato/i.test(err.message)) {
+      return res.status(415).json({ error: err.message });
+    }
+    next(err);
   }
 });
 
