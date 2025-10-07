@@ -294,7 +294,7 @@ router.put('/:gymId/presentation/index', upload.single('image'), async (req, res
       }),
       uploadBuffer({
         Bucket: bucket,
-        Key: `${base}/marker.jpeg`,
+        Key: `${base}/marker.jpg`,
         Body: marker100,
         ContentType: 'image/jpeg',
         CacheControl: 'public, max-age=31536000, immutable'
