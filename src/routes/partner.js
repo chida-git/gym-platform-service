@@ -88,7 +88,7 @@ router.patch('/plans/:id', async (req, res, next) => {
   try {
     const id = +req.params.id
     const body = await schema.validateAsync(req.body, { stripUnknown: true })
-console.log(req.body)
+
     const conn = await pool.getConnection()
     try {
       await conn.beginTransaction()
@@ -121,19 +121,15 @@ console.log(req.body)
 
       await conn.commit()
       res.json({ affectedRows: 1 })
-      console.log(".1")
-      console.log(params)
-      console.log(id)
+    
       const [[p2]] = await pool.query('SELECT id, gym_id, name, plan_type, price_cents, currency, visible, active FROM plans WHERE id=?', id)
-      console.log(p2)
       if (!p2) return
-console.log(".2")
+
       const ts = new Date().toISOString()
       const touched = Object.keys(body)
       const priceTouched = touched.some(k => ['price_cents','currency','visible','active'].includes(k))
       const planTouched  = touched.some(k => ['name','plan_type','visible','active'].includes(k))
-console.log(".3")
-console.log(planTouched)
+
       if (planTouched) {
         publishSafe(`plan.upsert.${p2.gym_id}`, {
           event: 'plan.upsert', plan_id: p2.id, gym_id: p2.gym_id,

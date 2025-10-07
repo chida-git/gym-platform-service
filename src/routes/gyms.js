@@ -5,12 +5,15 @@ const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
 const sharp = require('sharp');
+const { requireAuth } = require('../middleware/auth');
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION,          // es: 'eu-central-1'
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
 });
 //const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
+
+router.use(requireAuth);
 
 function isValidId(x) { return /^\d+$/.test(String(x)); }
 function sanitizeName(name) { return String(name).replace(/[^a-zA-Z0-9._-]/g, '_'); }
