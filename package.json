@@ -10,6 +10,8 @@
     "seed:dev": "node seed/dev-seed.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "amqplib": "^0.10.9",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -22,6 +24,7 @@
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "multer": "^2.0.2",
     "mysql2": "^3.9.7",
     "swagger-ui-express": "^5.0.1"
   },
