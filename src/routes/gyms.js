@@ -305,7 +305,7 @@ router.put('/:gymId/presentation/index', upload.single('image'), async (req, res
       ok: true,
       updated: [
         { key: `${base}/index.jpeg`, size: index500.length },
-        { key: `${base}/marker.jpeg`, size: marker100.length }
+        { key: `${base}/marker.jpg`, size: marker100.length }
       ]
     });
   } catch (err) {
