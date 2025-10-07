@@ -4,7 +4,7 @@ const { pool } = require('../db');
 const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
-const sharp = require('sharp'); // lo usi già per l'index
+const sharp = require('sharp');
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION,          // es: 'eu-central-1'
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -35,45 +35,99 @@ const upload = multer({
 
 /**
  * UPLOAD immagini presentazione (max 10)
- * POST /:gymId/presentation/images
- * Body (multipart/form-data):
- *   images: File  <-- ripetibile fino a 10 volte
+ * - Rinomina in 1.jpg, 2.jpg, ...
+ * - Ridimensiona a max 1920x1080
+ * - Blocca se già presenti 10 immagini
  */
 router.post('/:gymId/presentation/images', upload.array('images', 10), async (req, res, next) => {
   try {
     const bucket = process.env.S3_BUCKET;
     const { gymId } = req.params;
 
-    if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
-    if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'Nessun file caricato' });
+    if (!isValidId(gymId))
+      return res.status(400).json({ error: 'gymId non valido' });
+
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ error: 'Nessun file caricato' });
 
     const prefix = `gyms/${gymId}/gym_presentation/`;
+    const maxWidth = 1920;
+    const maxHeight = 1080;
+    const maxImages = 10;
 
+    // 🔹 1. Legge gli oggetti esistenti
+    const listed = await s3.listObjectsV2({
+      Bucket: bucket,
+      Prefix: prefix
+    }).promise();
+
+    // 🔹 2. Trova numeri già usati (1, 2, 3, …)
+    const existing = (listed.Contents || [])
+      .map(o => parseInt(path.basename(o.Key, path.extname(o.Key))))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b);
+
+    const existingCount = existing.length;
+    if (existingCount >= maxImages) {
+      return res.status(400).json({
+        error: `Hai già ${existingCount} immagini. Limite massimo: ${maxImages}.`
+      });
+    }
+
+    // 🔹 3. Calcola quanti nuovi file si possono caricare
+    const availableSlots = maxImages - existingCount;
+    if (req.files.length > availableSlots) {
+      return res.status(400).json({
+        error: `Puoi caricare al massimo ${availableSlots} immagini aggiuntive (limite totale ${maxImages}).`
+      });
+    }
+
+    // 🔹 4. Determina il prossimo numero disponibile
+    let counter = existingCount > 0 ? Math.max(...existing) + 1 : 1;
     const uploaded = [];
-    for (const f of req.files) {
-      const safeName = sanitizeName(f.originalname); // mantiene il nome (sanificato)
-      const Key = `${prefix}${safeName}`;
 
+    for (const f of req.files) {
+      const safeExt = path.extname(f.originalname).toLowerCase() || '.jpg';
+      const filename = `${counter}${safeExt}`;
+      const Key = `${prefix}${filename}`;
+
+      // 🔹 5. Ridimensiona se troppo grande
+      const resizedBuffer = await sharp(f.buffer)
+        .resize({
+          width: maxWidth,
+          height: maxHeight,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: 85, mozjpeg: true })
+        .toBuffer();
+
+      // 🔹 6. Upload su S3
       await s3.putObject({
         Bucket: bucket,
         Key,
-        Body: f.buffer,
-        ContentType: f.mimetype,
+        Body: resizedBuffer,
+        ContentType: 'image/jpeg',
         CacheControl: 'public, max-age=31536000, immutable'
       }).promise();
 
       uploaded.push({
         key: Key,
-        filename: safeName,
-        size: f.size,
-        contentType: f.mimetype,
-        url: buildPublicUrl(Key) // se usi un CDN/public base
+        filename,
+        size: resizedBuffer.length,
+        url: buildPublicUrl(Key)
       });
+
+      counter++;
     }
 
-    return res.json({ ok: true, count: uploaded.length, uploaded });
+    return res.json({
+      ok: true,
+      count: uploaded.length,
+      totalImages: existingCount + uploaded.length,
+      uploaded
+    });
   } catch (err) {
-    // gestisce errori di fileFilter (formato non supportato)
     if (err && /Formato non supportato/i.test(err.message)) {
       return res.status(415).json({ error: err.message });
     }
