@@ -6,6 +6,8 @@ const path = require('path');
 const AWS = require('aws-sdk');
 const sharp = require('sharp');
 const { requireAuth } = require('../middleware/auth');
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
+
 const s3 = new AWS.S3({
   region: process.env.AWS_REGION,          // es: 'eu-central-1'
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -124,6 +126,8 @@ router.put('/:id/profile', async (req, res, next) => {
       try { updated.opening_hours = JSON.parse(updated.opening_hours); } catch { updated.opening_hours = null; }
     }
 
+    const ts = new Date().toISOString();
+    publishSafe(`personal.upsert.${p.gym_id}`, { event: 'personal.upsert', opening_hours: updated.opening_hours, name: updated.name, email: updated.email, phone: updated.phone, description: updated.description, web: updated.web, ts }).catch(()=>{})
     return res.json({ ok: true, gym: updated });
   } catch (err) {
     if (err.isJoi) return res.status(400).json({ error: err.message });

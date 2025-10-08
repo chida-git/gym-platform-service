@@ -61,6 +61,7 @@ async function setupTopology(channel) {
   await channel.bindQueue(QUEUE, EXCHANGE, 'plan.archive.*');
   await channel.bindQueue(QUEUE, EXCHANGE, 'price.upsert.*');
   await channel.bindQueue(QUEUE, EXCHANGE, 'price.archive.*');
+  await channel.bindQueue(QUEUE, EXCHANGE, 'personal.upsert.*');
 
   // DLQ fisica per raccogliere i messaggi scartati
   await channel.assertQueue(DLQ_QUEUE, { durable: true });
