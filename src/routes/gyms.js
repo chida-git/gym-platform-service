@@ -15,6 +15,95 @@ const s3 = new AWS.S3({
 
 router.use(requireAuth);
 
+// ───────────────────────────────────────────────────────
+// GET: profilo palestra
+// GET /gyms/:id/profile
+// ───────────────────────────────────────────────────────
+router.get('/:id/profile', async (req, res, next) => {
+  try {
+    const id = +req.params.id;
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'id non valido' });
+    }
+
+    const [[row]] = await pool.query(
+      `SELECT name, email, phone, description, web
+         FROM gyms
+        WHERE id = ?`,
+      [id]
+    );
+
+    if (!row) return res.status(404).json({ error: 'Gym not found' });
+    return res.json(row);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ───────────────────────────────────────────────────────
+// PUT: aggiorna profilo palestra
+// PUT /gyms/:id/profile
+// Body JSON: { name, email, phone, description, web }
+// ───────────────────────────────────────────────────────
+const profileSchema = Joi.object({
+  name: Joi.string().max(180).required(),
+  email: Joi.string().email().max(180).allow(null, ''),       // opzionale
+  phone: Joi.string().max(40).allow(null, ''),                 // opzionale
+  description: Joi.string().max(500).allow(null, ''),          // opzionale
+  web: Joi.string().uri().max(2000).allow(null, '')            // opzionale
+});
+
+router.put('/:id/profile', async (req, res, next) => {
+  try {
+    const id = +req.params.id;
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'id non valido' });
+    }
+
+    const payload = await profileSchema.validateAsync(req.body, { stripUnknown: true });
+
+    // normalizza stringhe vuote a NULL
+    const toNull = v => (v === '' ? null : v);
+
+    const params = [
+      payload.name,
+      toNull(payload.email ?? null),
+      toNull(payload.phone ?? null),
+      toNull(payload.description ?? null),
+      toNull(payload.web ?? null),
+      id
+    ];
+
+    const [result] = await pool.query(
+      `UPDATE gyms
+          SET name = ?,
+              email = ?,
+              phone = ?,
+              description = ?,
+              web = ?,
+              updated_at = NOW()
+        WHERE id = ?`,
+      params
+    );
+
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Gym not found' });
+
+    // ritorna il record aggiornato
+    const [[updated]] = await pool.query(
+      `SELECT name, email, phone, description, web
+         FROM gyms
+        WHERE id = ?`,
+      [id]
+    );
+
+    return res.json({ ok: true, gym: updated });
+  } catch (err) {
+    // errori Joi → 400
+    if (err.isJoi) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 function isValidId(x) { return /^\d+$/.test(String(x)); }
 function sanitizeName(name) { return String(name).replace(/[^a-zA-Z0-9._-]/g, '_'); }
 
