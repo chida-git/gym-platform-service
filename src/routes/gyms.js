@@ -235,6 +235,16 @@ router.post('/:gymId/presentation/images', upload.array('images', 10), async (re
  */
 router.get('/:gymId/presentation/images', async (req, res, next) => {
   try {
+
+    const origin = req.headers.origin;
+if (origin && ALLOWED_ORIGINS.has(origin)) {
+  res.set('Access-Control-Allow-Origin', origin);
+  res.set('Access-Control-Allow-Credentials', 'true');
+  res.set('Vary', 'Origin');
+}
+res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+
+
     const bucket = process.env.S3_BUCKET;
     const { gymId } = req.params;
     if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
