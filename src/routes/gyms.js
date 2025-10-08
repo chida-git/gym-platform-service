@@ -235,6 +235,7 @@ router.post('/:gymId/presentation/images', upload.array('images', 10), async (re
  */
 router.get('/:gymId/presentation/images', async (req, res, next) => {
   try {
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     const bucket = process.env.S3_BUCKET;
     const { gymId } = req.params;
     if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
@@ -305,6 +306,7 @@ router.delete('/:gymId/presentation/images/:filename', async (req, res, next) =>
  */
 router.get('/:gymId/presentation/index', async (req, res, next) => {
   try {
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     const bucket = process.env.S3_BUCKET;
     const { gymId } = req.params;
     if (!isValidId(gymId)) return res.status(400).json({ error: 'gymId non valido' });
