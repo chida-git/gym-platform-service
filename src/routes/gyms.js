@@ -108,8 +108,17 @@ function isValidId(x) { return /^\d+$/.test(String(x)); }
 function sanitizeName(name) { return String(name).replace(/[^a-zA-Z0-9._-]/g, '_'); }
 
 function buildPublicUrl(key) {
-  const base = process.env.S3_PUBLIC_BASE; // es. https://my-cdn.example.com
-  return base ? `${base}/${key}` : undefined;
+  const base = process.env.S3_PUBLIC_BASE; // es. CloudFront o S3 website
+  // Se esplicitamente pubblico
+  if (process.env.S3_PUBLIC_MODE === 'public' && base) {
+    return `${base}/${key}`;
+  }
+  // Default: usa URL firmati
+  return s3.getSignedUrl('getObject', {
+    Bucket: process.env.S3_BUCKET,
+    Key: key,
+    Expires: 3600 // 1h (puoi aumentare/ridurre)
+  });
 }
 
 async function uploadBuffer({ Bucket, Key, Body, ContentType, CacheControl }) {
