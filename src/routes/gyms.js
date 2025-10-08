@@ -127,7 +127,7 @@ router.put('/:id/profile', async (req, res, next) => {
     }
 
     const ts = new Date().toISOString();
-    publishSafe(`personal.upsert.${p.gym_id}`, { event: 'personal.upsert', opening_hours: updated.opening_hours, name: updated.name, email: updated.email, phone: updated.phone, description: updated.description, web: updated.web, ts }).catch(()=>{})
+    publishSafe(`personal.upsert.${id}`, { event: 'personal.upsert', opening_hours: updated.opening_hours, name: updated.name, email: updated.email, phone: updated.phone, description: updated.description, web: updated.web, ts }).catch(()=>{})
     return res.json({ ok: true, gym: updated });
   } catch (err) {
     if (err.isJoi) return res.status(400).json({ error: err.message });
