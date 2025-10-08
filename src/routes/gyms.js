@@ -13,7 +13,7 @@ const s3 = new AWS.S3({
 });
 //const { uploadBuffer, listByPrefix, deleteKey } = require('../s3');
 
-router.use(requireAuth);
+//router.use(requireAuth);
 
 // ───────────────────────────────────────────────────────
 // GET: profilo palestra
