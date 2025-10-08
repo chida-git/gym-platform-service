@@ -22,22 +22,23 @@ const s3 = new AWS.S3({
 router.get('/:id/profile', async (req, res, next) => {
   try {
     const id = +req.params.id;
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ error: 'id non valido' });
-    }
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id non valido' });
 
     const [[row]] = await pool.query(
-      `SELECT name, email, phone, description, web
+      `SELECT name, email, phone, description, web, opening_hours
          FROM gyms
         WHERE id = ?`,
       [id]
     );
-
     if (!row) return res.status(404).json({ error: 'Gym not found' });
+
+    // se MySQL restituisce JSON come stringa, parsalo
+    if (typeof row.opening_hours === 'string') {
+      try { row.opening_hours = JSON.parse(row.opening_hours); } catch { row.opening_hours = null; }
+    }
+
     return res.json(row);
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
 // ───────────────────────────────────────────────────────
@@ -45,60 +46,86 @@ router.get('/:id/profile', async (req, res, next) => {
 // PUT /gyms/:id/profile
 // Body JSON: { name, email, phone, description, web }
 // ───────────────────────────────────────────────────────
+const timeRx = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const slotSchema = Joi.object({
+  open:  Joi.string().pattern(timeRx).required(),
+  close: Joi.string().pattern(timeRx).required()
+});
+
+const daySchema = Joi.array().items(slotSchema).max(8); // fino a 8 intervalli al giorno
+
+const openingHoursSchema = Joi.object({
+  mon: daySchema.default([]),
+  tue: daySchema.default([]),
+  wed: daySchema.default([]),
+  thu: daySchema.default([]),
+  fri: daySchema.default([]),
+  sat: daySchema.default([]),
+  sun: daySchema.default([])
+}).unknown(false);
+
 const profileSchema = Joi.object({
   name: Joi.string().max(180).required(),
   email: Joi.string().email().max(180).allow(null, ''),       // opzionale
   phone: Joi.string().max(40).allow(null, ''),                 // opzionale
   description: Joi.string().max(500).allow(null, ''),          // opzionale
-  web: Joi.string().uri().max(2000).allow(null, '')            // opzionale
+  web: Joi.string().uri().max(2000).allow(null, ''),            // opzionale
+  opening_hours: openingHoursSchema.allow(null) // opzionale o null
 });
 
 router.put('/:id/profile', async (req, res, next) => {
   try {
     const id = +req.params.id;
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ error: 'id non valido' });
-    }
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id non valido' });
 
     const payload = await profileSchema.validateAsync(req.body, { stripUnknown: true });
-
-    // normalizza stringhe vuote a NULL
     const toNull = v => (v === '' ? null : v);
 
+    const sets = [
+      'name = ?',
+      'email = ?',
+      'phone = ?',
+      'description = ?',
+      'web = ?'
+    ];
     const params = [
       payload.name,
       toNull(payload.email ?? null),
       toNull(payload.phone ?? null),
       toNull(payload.description ?? null),
-      toNull(payload.web ?? null),
-      id
+      toNull(payload.web ?? null)
     ];
 
+    // se opening_hours è stato passato, includilo
+    if (Object.prototype.hasOwnProperty.call(payload, 'opening_hours')) {
+      sets.push('opening_hours = ?');
+      params.push(payload.opening_hours === null ? null : JSON.stringify(payload.opening_hours));
+    }
+
+    // updated_at
+    sets.push('updated_at = NOW()');
+
     const [result] = await pool.query(
-      `UPDATE gyms
-          SET name = ?,
-              email = ?,
-              phone = ?,
-              description = ?,
-              web = ?,
-              updated_at = NOW()
-        WHERE id = ?`,
-      params
+      `UPDATE gyms SET ${sets.join(', ')} WHERE id = ?`,
+      [...params, id]
     );
 
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Gym not found' });
 
-    // ritorna il record aggiornato
     const [[updated]] = await pool.query(
-      `SELECT name, email, phone, description, web
+      `SELECT name, email, phone, description, web, opening_hours
          FROM gyms
         WHERE id = ?`,
       [id]
     );
 
+    if (typeof updated.opening_hours === 'string') {
+      try { updated.opening_hours = JSON.parse(updated.opening_hours); } catch { updated.opening_hours = null; }
+    }
+
     return res.json({ ok: true, gym: updated });
   } catch (err) {
-    // errori Joi → 400
     if (err.isJoi) return res.status(400).json({ error: err.message });
     next(err);
   }
