@@ -21,17 +21,18 @@ app.use((req, res, next) => {
 });
 
 app.use(helmet());
-app.use(cors({
-  origin(origin, cb) {
-    // consentiamo anche richieste senza Origin (server→server, curl)
-    if (!origin) return cb(null, true);
-    cb(null, ALLOWED_ORIGINS.has(origin));
-  },
-  credentials: true, // ← fondamentale con include
-  methods: ['GET','POST','PATCH','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','If-None-Match'],
-  exposedHeaders: ['ETag','Last-Modified'],
-}));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+    res.setHeader('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.options('*', cors());
 app.use(rateLimit({ windowMs: 15*60*1000, max: 1000 }));
 app.use(express.json());
