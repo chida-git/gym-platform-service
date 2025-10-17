@@ -2,7 +2,7 @@
 import express from 'express';
 import { pool } from '../db.js'; // pool mysql2/promise
 
-const router = express.Router();
+const router = require('express').Router();
 
 /**
  * GET /api/gyms/:id_gym/routes
