@@ -1,5 +1,4 @@
 // routes/gymRoutes.js
-import express from 'express';
 import { pool } from '../db.js'; // pool mysql2/promise
 
 const router = require('express').Router();
