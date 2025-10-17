@@ -75,4 +75,4 @@ router.delete('/:id_gym/routes/:route_key', async (req, res) => {
   res.status(204).end();
 });
 
-export default router;
+module.exports = router;
