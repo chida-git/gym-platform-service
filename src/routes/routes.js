@@ -8,7 +8,7 @@ const router = express.Router();
  * GET /api/gyms/:id_gym/routes
  * Ritorna la configurazione effettiva { overview: true, ... }
  */
-router.get('/gyms/:id_gym/routes', async (req, res) => {
+router.get('/:id_gym/routes', async (req, res) => {
   const { id_gym } = req.params;
   const [rows] = await pool.query(
     `SELECT route_key, enabled
@@ -28,7 +28,7 @@ router.get('/gyms/:id_gym/routes', async (req, res) => {
  * Body: { route_key: "plans", enabled: true }  // singolo update
  * oppure { updates: [{ route_key, enabled }, ...] } // batch
  */
-router.put('/gyms/:id_gym/routes', async (req, res) => {
+router.put('/:id_gym/routes', async (req, res) => {
   const { id_gym } = req.params;
   const { route_key, enabled, updates } = req.body;
 
@@ -67,7 +67,7 @@ router.put('/gyms/:id_gym/routes', async (req, res) => {
  * DELETE /api/gyms/:id_gym/routes/:route_key
  * Rimuove l’override (torna al default)
  */
-router.delete('/gyms/:id_gym/routes/:route_key', async (req, res) => {
+router.delete('/:id_gym/routes/:route_key', async (req, res) => {
   const { id_gym, route_key } = req.params;
   await pool.query(
     `DELETE FROM gym_route_config WHERE gym_id = ? AND route_key = ?`,
