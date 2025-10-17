@@ -13,7 +13,7 @@ router.get('/gyms/:id_gym/routes', async (req, res) => {
   const [rows] = await pool.query(
     `SELECT route_key, enabled
      FROM v_gym_routes_effective
-     WHERE id_gym = ?`,
+     WHERE gym_id = ?`,
     [id_gym]
   );
 
@@ -38,7 +38,7 @@ router.put('/gyms/:id_gym/routes', async (req, res) => {
 
     const doUpsert = async (rk, en) => {
       await conn.query(
-        `INSERT INTO gym_route_config (id_gym, route_key, enabled)
+        `INSERT INTO gym_route_config (gym_id, route_key, enabled)
          VALUES (?, ?, ?)
          ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)`,
         [id_gym, rk, en ? 1 : 0]
@@ -70,7 +70,7 @@ router.put('/gyms/:id_gym/routes', async (req, res) => {
 router.delete('/gyms/:id_gym/routes/:route_key', async (req, res) => {
   const { id_gym, route_key } = req.params;
   await pool.query(
-    `DELETE FROM gym_route_config WHERE id_gym = ? AND route_key = ?`,
+    `DELETE FROM gym_route_config WHERE gym_id = ? AND route_key = ?`,
     [id_gym, route_key]
   );
   res.status(204).end();
