@@ -23,7 +23,7 @@ router.get('/:gymId/schedule', async (req, res, next) => {
   UNION ALL
   SELECT DATE_ADD(d, INTERVAL 1 DAY) FROM dates WHERE DATE_ADD(d, INTERVAL 1 DAY) < DATE(?)
 ),
-generated AS (
+gslots AS (
   SELECT
     ws.id              AS weekly_slot_id,
     ws.gym_id,
@@ -51,7 +51,7 @@ SELECT
   COALESCE(g.capacity, NULL) AS capacity,
   CASE WHEN co.cancelled = 1 THEN 'cancelled' ELSE 'scheduled' END AS status,
   COALESCE(co.notes, NULL) AS notes
-FROM generated g
+FROM gslots g
 LEFT JOIN class_overrides co
   ON co.weekly_slot_id = g.weekly_slot_id
  AND co.override_date = g.day_date
