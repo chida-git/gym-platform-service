@@ -1,8 +1,10 @@
 openapi: 3.0.3
 info:
   title: Gym Platform API
-  version: 0.2.1
-  description: API per palestre, piani, abbonamenti, check-in, e calendario corsi (tipi, fasce settimanali, override). Nessuna gestione prenotazioni corsi.
+  version: 0.2.2
+  description: >
+    API per palestre, piani, abbonamenti, check-in e calendario corsi
+    (tipi, fasce settimanali, override). Nessuna gestione prenotazioni corsi.
 servers:
   - url: http://localhost:3000
 
@@ -72,7 +74,7 @@ components:
         token: { type: string }
         partner: { type: object }
 
-    # === Nuovi schemi corsi ===
+    # === Corsi ===
     CourseType:
       type: object
       properties:
@@ -126,8 +128,6 @@ components:
         capacity: { type: integer, nullable: true }
         status: { type: string, enum: [scheduled, cancelled] }
         notes: { type: string, nullable: true }
-
-security: []
 
 paths:
   /health:
@@ -448,7 +448,7 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/CheckinRow" }
 
-  # ====== Nuovi endpoint corsi ======
+  # ====== Corsi ======
 
   /gyms/{gymId}/course-types:
     get:
