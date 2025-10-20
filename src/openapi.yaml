@@ -433,4 +433,106 @@ paths:
                 user: { type: object }
       "403": { description: Accesso negato }
       "502": { description: Errore servizi esterni }
+paths:
+  /gyms/{gymId}/course-types:
+    get:
+      summary: List course types
+      parameters:
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
+      responses: { "200": { description: OK } }
+    post:
+      summary: Create course type
+      parameters: [ { in: path, name: gymId, required: true, schema: { type: integer } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ name, durationMin ]
+              properties:
+                name: { type: string }
+                durationMin: { type: integer }
+                description: { type: string }
+                level: { type: string }
+                status: { type: string, enum: [active, inactive] }
+      responses: { "201": { description: Created }, "409": { description: Duplicate slug } }
+
+  /course-types/{id}:
+    patch:
+      summary: Update course type
+      parameters: [ { in: path, name: id, required: true, schema: { type: integer } } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                durationMin: { type: integer }
+                description: { type: string }
+                level: { type: string }
+                status: { type: string, enum: [active, inactive] }
+      responses: { "200": { description: OK }, "404": { description: Not found } }
+
+  /gyms/{gymId}/weekly-slots:
+    get:
+      summary: List weekly slots
+      parameters:
+        - { in: path, name: gymId, required: true, schema: { type: integer } }
+    post:
+      summary: Create weekly slot
+      parameters:
+        - { in: path, name: gymId, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ courseTypeId, weekday, startTime, durationMin ]
+              properties:
+                courseTypeId: { type: integer }
+                weekday: { type: integer, minimum: 0, maximum: 6 }
+                startTime: { type: string, example: "18:00" }
+                durationMin: { type: integer }
+                capacity: { type: integer, nullable: true }
+                isActive: { type: boolean }
+                notes: { type: string }
+
+  /weekly-slots/{id}:
+    patch:
+      summary: Update weekly slot
+      parameters: [ { in: path, name: id, required: true, schema: { type: integer } } ]
+
+  /weekly-slots/{id}/overrides:
+    post:
+      summary: Create or update a single-date override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ date ]
+              properties:
+                date: { type: string, format: date }
+                cancelled: { type: boolean }
+                startTime: { type: string, example: "19:00" }
+                durationMin: { type: integer }
+                notes: { type: string }
+
+  /gyms/{gymId}/schedule:
+    get:
+      summary: Get generated schedule between two dates
+      parameters:
+        - { in: path, name: gymId, required: true, schema: { type: integer } }
+        - { in: query, name: from, required: true, schema: { type: string, format: date } }
+        - { in: query, name: to, required: true, schema: { type: string, format: date } }
+        - { in: query, name: courseTypeId, schema: { type: integer } }
+      responses: { "200": { description: OK } }
+
 
