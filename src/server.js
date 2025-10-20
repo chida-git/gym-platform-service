@@ -55,6 +55,8 @@ app.use('/routes', require('./routes/routes'));
 app.use('/schedule', require('./routes/schedule_course'));
 app.use('/course', require('./routes/course_types'));
 app.use('/weekly_slots', require('./routes/weekly_slots'));
+app.use('/extras', require('./routes/extras'));
+app.use('/extras_gym', require('./routes/gym_extras'));
 
 (async () => {
   try {
