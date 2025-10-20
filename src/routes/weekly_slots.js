@@ -5,7 +5,7 @@ const db = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { pick } = require('../util');
 
-router.use(requireAuth);
+//router.use(requireAuth);
 
 /**
  * GET /gyms/:gymId/weekly-slots
