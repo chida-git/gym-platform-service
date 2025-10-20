@@ -1,7 +1,7 @@
 // src/routes/weekly_slots.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { pick } = require('../util');
 
@@ -13,7 +13,7 @@ const { pick } = require('../util');
 router.get('/:gymId/weekly-slots', async (req, res, next) => {
   try {
     const { gymId } = req.params;
-    const [rows] = await db.query(
+    const [rows] = await pool.query(
       `SELECT ws.id, ws.gym_id AS gymId, ws.course_type_id AS courseTypeId, ct.name AS courseName,
               ws.weekday, ws.start_time AS startTime, ws.duration_min AS durationMin,
               ws.capacity, ws.is_active AS isActive, ws.notes,
@@ -37,7 +37,7 @@ router.post('/:gymId/weekly-slots', async (req, res, next) => {
     const b = pick(req.body, ['courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
     if (b.courseTypeId == null || b.weekday == null || !b.startTime || !b.durationMin)
       return res.status(400).json({ message: 'courseTypeId, weekday, startTime, durationMin are required' });
-    await db.query(
+    await pool.query(
       `INSERT INTO weekly_slots (gym_id, course_type_id, weekday, start_time, duration_min, capacity, is_active, notes)
        VALUES (?,?,?,?,?,?,COALESCE(?,1),?)`,
        [gymId, b.courseTypeId, b.weekday, b.startTime, b.durationMin, b.capacity || null, b.isActive, b.notes || null]
@@ -64,7 +64,7 @@ router.patch('/weekly-slots/:id', async (req, res, next) => {
     if (!fields.length) return res.status(400).json({ message: 'No fields to update' });
 
     values.push(id);
-    await db.query(`UPDATE weekly_slots SET ${fields.join(', ')} WHERE id=?`, values);
+    await pool.query(`UPDATE weekly_slots SET ${fields.join(', ')} WHERE id=?`, values);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -82,12 +82,12 @@ router.post('/weekly-slots/:id/overrides', async (req, res, next) => {
     // infer gymId from slot to keep body simple
     let gymId = b.gymId;
     if (!gymId) {
-      const [slot] = await db.query(`SELECT gym_id FROM weekly_slots WHERE id=?`, [id]);
+      const [slot] = await pool.query(`SELECT gym_id FROM weekly_slots WHERE id=?`, [id]);
       if (!slot.length) return res.status(404).json({ message: 'weekly slot not found' });
       gymId = slot[0].gym_id;
     }
 
-    await db.query(
+    await pool.query(
       `INSERT INTO class_overrides (gym_id, weekly_slot_id, override_date, cancelled, start_time, duration_min, notes)
        VALUES (?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE cancelled=VALUES(cancelled),
