@@ -450,7 +450,7 @@ paths:
 
   # ====== Corsi ======
 
-  /gyms/{gymId}/course-types:
+  /course/{gymId}/course-types:
     get:
       summary: List course types
       parameters:
@@ -490,7 +490,7 @@ paths:
         "201": { description: Created }
         "409": { description: Duplicate slug }
 
-  /course-types/{id}:
+  /course/course-types/{id}:
     patch:
       summary: Update course type
       parameters:
@@ -517,7 +517,7 @@ paths:
               schema: { $ref: "#/components/schemas/CourseType" }
         "404": { description: Not found }
 
-  /gyms/{gymId}/weekly-slots:
+  /weekly_slots/{gymId}/weekly-slots:
     get:
       summary: List weekly slots
       parameters:
@@ -558,7 +558,7 @@ paths:
       responses:
         "201": { description: Created }
 
-  /weekly-slots/{id}:
+  /weekly_slots/weekly-slots/{id}:
     patch:
       summary: Update weekly slot
       parameters:
@@ -583,7 +583,7 @@ paths:
         "200": { description: OK }
         "404": { description: Not found }
 
-  /weekly-slots/{id}/overrides:
+  /weekly_slots/weekly-slots/{id}/overrides:
     post:
       summary: Create or update a single-date override
       requestBody:
@@ -602,7 +602,7 @@ paths:
       responses:
         "201": { description: Created }
 
-  /gyms/{gymId}/schedule:
+  /schedule/{gymId}/schedule:
     get:
       summary: Get generated schedule between two dates
       parameters:
