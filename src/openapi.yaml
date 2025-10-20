@@ -1,178 +1,197 @@
 openapi: 3.0.3
 info:
   title: Gym Platform API
-  version: 0.2.0
-  description: API per palestre, piani, abbonamenti, prenotazioni e partner portal.
+  version: 0.2.1
+  description: API per palestre, piani, abbonamenti, check-in, e calendario corsi (tipi, fasce settimanali, override). Nessuna gestione prenotazioni corsi.
 servers:
-- url: http://localhost:3000
+  - url: http://localhost:3000
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
   schemas:
     Plan:
       type: object
       properties:
-        id:
-          type: integer
-        name:
-          type: string
-        plan_type:
-          type: string
-        price_cents:
-          type: integer
-        duration_days:
-          type: integer
-        entries_total:
-          type: integer
+        id: { type: integer }
+        name: { type: string }
+        plan_type: { type: string }
+        price_cents: { type: integer }
+        currency: { type: string, example: EUR }
+        duration_days: { type: integer }
+        entries_total: { type: integer, nullable: true }
+
     Gym:
       type: object
       properties:
-        id:
-          type: integer
-        name:
-          type: string
-        email:
-          type: string
-        phone:
-          type: string
-        status:
-          type: string
-        created_at:
-          type: string
-          format: date-time
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        status: { type: string, example: active }
+        created_at: { type: string, format: date-time }
+
     GymLocation:
       type: object
       properties:
-        id:
-          type: integer
-        address_line1:
-          type: string
-        zone_label:
-          type: string
-        latitude:
-          type: number
-        longitude:
-          type: number
-        is_primary:
-          type: integer
+        id: { type: integer }
+        address_line1: { type: string }
+        zone_label: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        is_primary: { type: integer, description: "1/0" }
+
     Slot:
       type: object
       properties:
-        id:
-          type: integer
-        date:
-          type: string
-        time_from:
-          type: string
-        time_to:
-          type: string
-        capacity:
-          type: integer
-        available:
-          type: integer
-        is_active:
-          type: integer
+        id: { type: integer }
+        date: { type: string, format: date }
+        time_from: { type: string, example: "07:00:00" }
+        time_to: { type: string, example: "08:00:00" }
+        capacity: { type: integer }
+        available: { type: integer }
+        is_active: { type: integer, description: "1/0" }
+
     CheckinRow:
       type: object
       properties:
-        id:
-          type: integer
-        used_at:
-          type: string
-          format: date-time
-        status:
-          type: string
-        user_name:
-          type: string
-        user_email:
-          type: string
-        plan_name:
-          type: string
+        id: { type: integer }
+        used_at: { type: string, format: date-time }
+        status: { type: string }
+        user_name: { type: string }
+        user_email: { type: string }
+        plan_name: { type: string }
+
     AuthLoginResponse:
       type: object
       properties:
-        token:
-          type: string
-        partner:
-          type: object
+        token: { type: string }
+        partner: { type: object }
+
+    # === Nuovi schemi corsi ===
+    CourseType:
+      type: object
+      properties:
+        id: { type: integer }
+        gymId: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        durationMin: { type: integer }
+        description: { type: string, nullable: true }
+        level: { type: string, nullable: true }
+        status: { type: string, enum: [active, inactive] }
+
+    WeeklySlot:
+      type: object
+      properties:
+        id: { type: integer }
+        gymId: { type: integer }
+        courseTypeId: { type: integer }
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: "0=Lunedì ... 6=Domenica (come WEEKDAY() MySQL)"
+        startTime: { type: string, example: "18:00" }
+        durationMin: { type: integer }
+        capacity: { type: integer, nullable: true }
+        isActive: { type: boolean }
+        notes: { type: string, nullable: true }
+
+    ClassOverride:
+      type: object
+      properties:
+        id: { type: integer }
+        gymId: { type: integer }
+        weeklySlotId: { type: integer }
+        overrideDate: { type: string, format: date }
+        cancelled: { type: boolean }
+        startTime: { type: string, nullable: true, example: "19:00" }
+        durationMin: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+
+    ScheduleItem:
+      type: object
+      properties:
+        weeklySlotId: { type: integer }
+        gymId: { type: integer }
+        courseTypeId: { type: integer }
+        courseName: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        capacity: { type: integer, nullable: true }
+        status: { type: string, enum: [scheduled, cancelled] }
+        notes: { type: string, nullable: true }
+
+security: []
+
 paths:
   /health:
     get:
       summary: Health
       responses:
-        '200':
-          description: OK
+        "200": { description: OK }
+
   /gyms:
     get:
       summary: Cerca palestre
       parameters:
-      - name: lat
-        in: query
-        schema:
-          type: number
-      - name: lon
-        in: query
-        schema:
-          type: number
-      - name: radius
-        in: query
-        schema:
-          type: integer
-          default: 2000
-      - name: zone
-        in: query
-        schema:
-          type: string
+        - in: query
+          name: lat
+          schema: { type: number }
+        - in: query
+          name: lon
+          schema: { type: number }
+        - in: query
+          name: radius
+          schema: { type: integer, default: 2000 }
+        - in: query
+          name: zone
+          schema: { type: string }
       responses:
-        '200':
-          description: Lista
+        "200": { description: Lista }
+
   /gyms/near/{gymId}:
     get:
       summary: Palestre vicine a gymId
       parameters:
-      - name: gymId
-        in: path
-        required: true
-        schema:
-          type: integer
-      - name: radius
-        in: query
-        schema:
-          type: integer
-          default: 2000
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: radius
+          schema: { type: integer, default: 2000 }
       responses:
-        '200':
-          description: Ok
+        "200": { description: Ok }
+
   /gyms/{id}:
     get:
       summary: Dettaglio palestra
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
       responses:
-        '200':
+        "200":
           description: Ok
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  gym:
-                    $ref: '#/components/schemas/Gym'
+                  gym: { $ref: "#/components/schemas/Gym" }
                   locations:
                     type: array
-                    items:
-                      $ref: '#/components/schemas/GymLocation'
+                    items: { $ref: "#/components/schemas/GymLocation" }
                   plans:
                     type: array
-                    items:
-                      $ref: '#/components/schemas/Plan'
+                    items: { $ref: "#/components/schemas/Plan" }
               examples:
                 sample:
                   value:
@@ -182,48 +201,48 @@ paths:
                       email: isola@milfit.it
                       phone: 02-000111
                       status: active
-                      created_at: '2025-08-10T09:00:00Z'
+                      created_at: "2025-08-10T09:00:00Z"
                     locations:
-                    - id: 10
-                      address_line1: Via Borsieri 12
-                      zone_label: Isola
-                      latitude: 45.4891
-                      longitude: 9.1899
-                      is_primary: 1
+                      - id: 10
+                        address_line1: Via Borsieri 12
+                        zone_label: Isola
+                        latitude: 45.4891
+                        longitude: 9.1899
+                        is_primary: 1
                     plans:
+                      - id: 201
+                        name: Mensile
+                        plan_type: monthly
+                        price_cents: 4999
+                        currency: EUR
+                        duration_days: 30
+
+  /plans:
+    get:
+      summary: Piani per palestra
+      parameters:
+        - in: query
+          name: gym_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Plan" }
+              examples:
+                sample:
+                  value:
                     - id: 201
                       name: Mensile
                       plan_type: monthly
                       price_cents: 4999
                       currency: EUR
                       duration_days: 30
-  /plans:
-    get:
-      summary: Piani per palestra
-      parameters:
-      - name: gym_id
-        in: query
-        required: true
-        schema:
-          type: integer
-      responses:
-        '200':
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Plan'
-              examples:
-                sample:
-                  value:
-                  - id: 201
-                    name: Mensile
-                    plan_type: monthly
-                    price_cents: 4999
-                    currency: EUR
-                    duration_days: 30
+
   /subscriptions:
     post:
       summary: Crea abbonamento
@@ -231,11 +250,10 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { type: object }
       responses:
-        '201':
-          description: Creato
+        "201": { description: Creato }
+
   /bookings:
     post:
       summary: Crea prenotazione+QR
@@ -243,11 +261,10 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { type: object }
       responses:
-        '201':
-          description: Creato
+        "201": { description: Creato }
+
   /checkin/verify:
     post:
       summary: Verifica QR
@@ -255,17 +272,16 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
+            schema: { type: object }
       responses:
-        '200':
-          description: Ok
+        "200": { description: Ok }
+
   /payments/webhook:
     post:
       summary: Webhook pagamenti
       responses:
-        '200':
-          description: Ok
+        "200": { description: Ok }
+
   /auth/partner/login:
     post:
       summary: Login partner
@@ -276,164 +292,164 @@ paths:
             schema:
               type: object
               properties:
-                email:
-                  type: string
-                password:
-                  type: string
+                email: { type: string }
+                password: { type: string }
       responses:
-        '200':
+        "200":
           description: Ok
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/AuthLoginResponse'
+              schema: { $ref: "#/components/schemas/AuthLoginResponse" }
               examples:
                 sample:
                   value:
-                    token: <jwt>
+                    token: "<jwt>"
                     partner:
                       id: 1001
                       gym_id: 1
                       email: manager.isola@example.com
                       role: admin
-  /partner/slots:
-    get:
-      summary: Slot per data (partner)
-      security:
-      - bearerAuth: []
-      parameters:
-      - name: gym_id
-        in: query
-        required: true
-        schema:
-          type: integer
-      - name: date
-        in: query
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Slot'
-              examples:
-                sample:
-                  value:
-                  - id: 1
-                    date: '2025-08-10'
-                    time_from: 07:00:00
-                    time_to: 08:00:00
-                    capacity: 20
-                    available: 20
-                    is_active: 1
-  /partner/slots/{id}:
-    patch:
-      summary: Aggiorna slot (partner)
-      security:
-      - bearerAuth: []
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-      responses:
-        '200':
-          description: Ok
-  /partner/plans:
+
+  /partner/access/validate-user:
     post:
-      summary: Crea piano (partner)
-      security:
-      - bearerAuth: []
-      responses:
-        '201':
-          description: Creato
-  /partner/plans/{id}:
-    patch:
-      summary: Aggiorna piano (partner)
-      security:
-      - bearerAuth: []
-      responses:
-        '200':
-          description: Ok
-    delete:
-      summary: Elimina piano (partner)
-      security:
-      - bearerAuth: []
-      responses:
-        '200':
-          description: Ok
-  /partner/checkins:
-    get:
-      summary: Check-in giorno (partner)
-      security:
-      - bearerAuth: []
-      parameters:
-      - name: gym_id
-        in: query
+      summary: Valida token e recupera profilo utente
+      security: [{ bearerAuth: [] }]
+      requestBody:
         required: true
-        schema:
-          type: integer
-      - name: date
-        in: query
-        required: true
-        schema:
-          type: string
-      - name: q
-        in: query
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Ok
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CheckinRow'
-              examples:
-                sample:
-                  value:
-                  - id: 555
-                    used_at: '2025-08-10T09:21:00Z'
-                    status: checked_in
-                    user_name: Mario Rossi
-                    user_email: mario.rossi@example.com
-                    plan_name: Mensile
-/partner/access/validate-user:
-  post:
-    summary: Valida token e recupera profilo utente
-    security: [{ bearerAuth: [] }]
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              token_raw: { type: string }
-              device_id: { type: string }
-            required: [token_raw, device_id]
-    responses:
-      "200":
-        description: Ok
         content:
           application/json:
             schema:
               type: object
+              required: [token_raw, device_id]
               properties:
-                granted: { type: boolean }
-                id_user: { type: integer }
-                user: { type: object }
-      "403": { description: Accesso negato }
-      "502": { description: Errore servizi esterni }
-paths:
+                token_raw: { type: string }
+                device_id: { type: string }
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  granted: { type: boolean }
+                  id_user: { type: integer }
+                  user: { type: object }
+        "403": { description: Accesso negato }
+        "502": { description: Errore servizi esterni }
+
+  /partner/slots:
+    get:
+      summary: Slot per data (partner)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: gym_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Slot" }
+              examples:
+                sample:
+                  value:
+                    - id: 1
+                      date: "2025-08-10"
+                      time_from: "07:00:00"
+                      time_to: "08:00:00"
+                      capacity: 20
+                      available: 20
+                      is_active: 1
+
+  /partner/slots/{id}:
+    patch:
+      summary: Aggiorna slot (partner)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Ok }
+
+  /partner/plans:
+    post:
+      summary: Crea piano (partner)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201": { description: Creato }
+
+  /partner/plans/{id}:
+    patch:
+      summary: Aggiorna piano (partner)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Ok }
+    delete:
+      summary: Elimina piano (partner)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { description: Ok }
+
+  /partner/checkins:
+    get:
+      summary: Check-in giorno (partner)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: gym_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        "200":
+          description: Ok
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CheckinRow" }
+
+  # ====== Nuovi endpoint corsi ======
+
   /gyms/{gymId}/course-types:
     get:
       summary: List course types
@@ -442,29 +458,46 @@ paths:
           name: gymId
           required: true
           schema: { type: integer }
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CourseType" }
     post:
       summary: Create course type
-      parameters: [ { in: path, name: gymId, required: true, schema: { type: integer } } ]
+      parameters:
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ name, durationMin ]
+              required: [name, durationMin]
               properties:
                 name: { type: string }
                 durationMin: { type: integer }
                 description: { type: string }
                 level: { type: string }
                 status: { type: string, enum: [active, inactive] }
-      responses: { "201": { description: Created }, "409": { description: Duplicate slug } }
+      responses:
+        "201": { description: Created }
+        "409": { description: Duplicate slug }
 
   /course-types/{id}:
     patch:
       summary: Update course type
-      parameters: [ { in: path, name: id, required: true, schema: { type: integer } } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
       requestBody:
         content:
           application/json:
@@ -476,24 +509,44 @@ paths:
                 description: { type: string }
                 level: { type: string }
                 status: { type: string, enum: [active, inactive] }
-      responses: { "200": { description: OK }, "404": { description: Not found } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseType" }
+        "404": { description: Not found }
 
   /gyms/{gymId}/weekly-slots:
     get:
       summary: List weekly slots
       parameters:
-        - { in: path, name: gymId, required: true, schema: { type: integer } }
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WeeklySlot" }
     post:
       summary: Create weekly slot
       parameters:
-        - { in: path, name: gymId, required: true, schema: { type: integer } }
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [ courseTypeId, weekday, startTime, durationMin ]
+              required: [courseTypeId, weekday, startTime, durationMin]
               properties:
                 courseTypeId: { type: integer }
                 weekday: { type: integer, minimum: 0, maximum: 6 }
@@ -502,11 +555,33 @@ paths:
                 capacity: { type: integer, nullable: true }
                 isActive: { type: boolean }
                 notes: { type: string }
+      responses:
+        "201": { description: Created }
 
   /weekly-slots/{id}:
     patch:
       summary: Update weekly slot
-      parameters: [ { in: path, name: id, required: true, schema: { type: integer } } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                courseTypeId: { type: integer }
+                weekday: { type: integer, minimum: 0, maximum: 6 }
+                startTime: { type: string, example: "18:00" }
+                durationMin: { type: integer }
+                capacity: { type: integer, nullable: true }
+                isActive: { type: boolean }
+                notes: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Not found }
 
   /weekly-slots/{id}/overrides:
     post:
@@ -517,22 +592,40 @@ paths:
           application/json:
             schema:
               type: object
-              required: [ date ]
+              required: [date]
               properties:
                 date: { type: string, format: date }
                 cancelled: { type: boolean }
                 startTime: { type: string, example: "19:00" }
                 durationMin: { type: integer }
                 notes: { type: string }
+      responses:
+        "201": { description: Created }
 
   /gyms/{gymId}/schedule:
     get:
       summary: Get generated schedule between two dates
       parameters:
-        - { in: path, name: gymId, required: true, schema: { type: integer } }
-        - { in: query, name: from, required: true, schema: { type: string, format: date } }
-        - { in: query, name: to, required: true, schema: { type: string, format: date } }
-        - { in: query, name: courseTypeId, schema: { type: integer } }
-      responses: { "200": { description: OK } }
-
-
+        - in: path
+          name: gymId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: from
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          required: true
+          schema: { type: string, format: date }
+        - in: query
+          name: courseTypeId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ScheduleItem" }
