@@ -104,4 +104,4 @@ router.delete("/:gymId/extras/:extraId", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-export default router;
+module.exports=router;
