@@ -6,7 +6,7 @@ info:
     API per palestre, piani, abbonamenti, check-in e calendario corsi
     (tipi, fasce settimanali, override). Nessuna gestione prenotazioni corsi.
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:3004
 
 components:
   securitySchemes:
