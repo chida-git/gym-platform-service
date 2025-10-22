@@ -2,8 +2,10 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const router = express.Router();
 const { pool } = require('../db');
-const asyncH = require('../middleware/async-handler');
-const { ok } = require('../util');
+
+const asyncH = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const ok = (res, data, meta) => res.json({ data, meta });
+const bad = (res, errors, code = 400) => res.status(code).json({ errors });
 
 // -------- GET CONFIG --------
 router.get('/config', asyncH(async (req, res) => {
