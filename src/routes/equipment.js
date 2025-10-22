@@ -266,7 +266,7 @@ router.get('/assets',
     if (status_enum) { wh.push('a.status_enum = ?'); pr.push(status_enum); }
     if (q) { wh.push('(a.tag_code LIKE ? OR a.serial_number LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
 
-    const rows = await pool.query(
+    const [rows] = await pool.query(
       `SELECT
   a.id, a.gym_id, a.location_id, a.model_id, a.tag_code, a.serial_number,
   a.purchase_date, a.purchase_price_cents, a.condition_enum, a.status_enum,
@@ -279,7 +279,10 @@ WHERE ${wh.join(' AND ')}
 ORDER BY a.updated_at DESC
 LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
     );
-    ok(res, rows, { limit: Number(limit), offset: Number(offset) });
+
+const data = rows.map(r => normalizeRow(r));
+
+    ok(res, data, { limit: Number(limit), offset: Number(offset) });
   })
 );
 
