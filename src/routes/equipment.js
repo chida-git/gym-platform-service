@@ -35,13 +35,16 @@ router.get('/categories',
     if (search) { wh.push('name LIKE ?'); pr.push(`%${search}%`); }
     if (parent_id) { wh.push('parent_id = ?'); pr.push(parent_id); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
-    const rows = await pool.query(
+    const [rows] = await pool.query(
       `SELECT id, name, parent_id, created_at, updated_at
        FROM equipment_categories ${where}
        ORDER BY name ASC
        LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
     );
-    ok(res, rows, { limit: Number(limit), offset: Number(offset) });
+
+    const data = rows.map(r => normalizeRow(r));
+
+    ok(res, data, { limit: Number(limit), offset: Number(offset) });
   })
 );
 
