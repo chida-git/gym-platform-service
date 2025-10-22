@@ -58,6 +58,7 @@ app.use('/weekly_slots', require('./routes/weekly_slots'));
 app.use('/extras', require('./routes/extras'));
 app.use('/extras_gym', require('./routes/gym_extras'));
 app.use('/equipment', require('./routes/equipment'));
+app.use('/capacity', require('./routes/gym_capacity'));
 
 (async () => {
   try {
