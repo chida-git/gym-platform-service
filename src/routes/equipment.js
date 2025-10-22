@@ -358,7 +358,7 @@ router.get('/stock',
     if (model_id) { wh.push('s.model_id=?'); pr.push(model_id); }
     if (q) { wh.push('(s.variant_label LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`); }
 
-    const rows = await pool.query(
+    const [rows] = await pool.query(
       `SELECT
   s.id, s.gym_id, s.location_id, s.model_id, s.variant_label,
   s.quantity, s.min_quantity, s.created_at, s.updated_at,
@@ -370,7 +370,10 @@ WHERE ${wh.join(' AND ')}
 ORDER BY s.updated_at DESC
 LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
     );
-    ok(res, rows, { limit: Number(limit), offset: Number(offset) });
+
+    const data = rows.map(r => normalizeRow(r));
+
+    ok(res, data, { limit: Number(limit), offset: Number(offset) });
   })
 );
 
