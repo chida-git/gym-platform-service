@@ -252,14 +252,17 @@ router.get('/assets',
     if (q) { wh.push('(a.tag_code LIKE ? OR a.serial_number LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
 
     const rows = await pool.query(
-      `SELECT a.*, m.brand, m.model_name, c.name AS category_name, l.name AS location_name
-       FROM equipment_assets a
-       JOIN equipment_models m ON m.id = a.model_id
-       JOIN equipment_categories c ON c.id = m.category_id
-       LEFT JOIN gym_locations l ON l.id = a.location_id
-       WHERE ${wh.join(' AND ')}
-       ORDER BY a.updated_at DESC
-       LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
+      `SELECT
+  a.id, a.gym_id, a.location_id, a.model_id, a.tag_code, a.serial_number,
+  a.purchase_date, a.purchase_price_cents, a.condition_enum, a.status_enum,
+  a.notes, a.created_at, a.updated_at,
+  m.brand, m.model_name, c.name AS category_name
+FROM equipment_assets a
+JOIN equipment_models m ON m.id = a.model_id
+JOIN equipment_categories c ON c.id = m.category_id
+WHERE ${wh.join(' AND ')}
+ORDER BY a.updated_at DESC
+LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
     );
     ok(res, rows, { limit: Number(limit), offset: Number(offset) });
   })
@@ -338,14 +341,16 @@ router.get('/stock',
     if (q) { wh.push('(s.variant_label LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`); }
 
     const rows = await pool.query(
-      `SELECT s.*, m.brand, m.model_name, c.name AS category_name, l.name AS location_name
-       FROM equipment_stock s
-       JOIN equipment_models m ON m.id = s.model_id
-       JOIN equipment_categories c ON c.id = m.category_id
-       LEFT JOIN gym_locations l ON l.id = s.location_id
-       WHERE ${wh.join(' AND ')}
-       ORDER BY s.updated_at DESC
-       LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
+      `SELECT
+  s.id, s.gym_id, s.location_id, s.model_id, s.variant_label,
+  s.quantity, s.min_quantity, s.created_at, s.updated_at,
+  m.brand, m.model_name, c.name AS category_name
+FROM equipment_stock s
+JOIN equipment_models m ON m.id = s.model_id
+JOIN equipment_categories c ON c.id = m.category_id
+WHERE ${wh.join(' AND ')}
+ORDER BY s.updated_at DESC
+LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
     );
     ok(res, rows, { limit: Number(limit), offset: Number(offset) });
   })
