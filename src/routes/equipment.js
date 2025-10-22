@@ -440,11 +440,12 @@ router.delete('/stock/:id',
 router.get('/stock/:id/specs',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
-    const rows = await pool.query(
+    const [rows] = await pool.query(
       `SELECT id, stock_id, spec_key, spec_value, created_at, updated_at
        FROM equipment_stock_specs WHERE stock_id=? ORDER BY spec_key ASC`, [req.params.id]
     );
-    ok(res, rows);
+    const data = rows.map(r => normalizeRow(r));
+    ok(res, data);
   })
 );
 
