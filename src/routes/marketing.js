@@ -75,6 +75,99 @@ router.patch('/marketing/contacts/:id',
   })
 );
 
+// GET /marketing/contacts?gym_id=1&search=...&subscribed=1&limit=50&offset=0
+router.get('/marketing/contacts',
+  [
+    query('gym_id').isInt().toInt(),
+    query('search').optional().isString().trim(),
+    query('subscribed').optional().isInt({ min:0, max:1 }).toInt(),
+    query('limit').optional().isInt({ min:1, max:200 }).toInt(),
+    query('offset').optional().isInt({ min:0 }).toInt(),
+  ],
+  asyncH(async (req, res) => {
+    const { gym_id, search, subscribed, limit=50, offset=0 } = req.query;
+    const wh = ['mc.gym_id = ?']; const pr=[gym_id];
+    if (typeof subscribed !== 'undefined') { wh.push('mc.subscribed = ?'); pr.push(subscribed); }
+    if (search) {
+      wh.push('(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
+      pr.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    const [rows] = await db.query(
+      `SELECT mc.id, mc.user_id, mc.subscribed, mc.tags, u.full_name, u.email, u.phone
+       FROM marketing_contacts mc
+       JOIN users u ON u.id = mc.user_id
+       WHERE ${wh.join(' AND ')}
+       ORDER BY mc.id DESC
+       LIMIT ? OFFSET ?`,
+       [...pr, Number(limit), Number(offset)]
+    );
+    res.json(rows);
+  })
+);
+
+
+// POST /marketing/campaigns/:id/recipients  { contact_ids:[...], replace:true|false }
+router.post('/marketing/campaigns/:id/recipients',
+  [
+    param('id').isInt().toInt(),
+    body('contact_ids').isArray({ min:1 }),
+    body('contact_ids.*').isInt().toInt(),
+    body('replace').optional().isBoolean()
+  ],
+  asyncH(async (req, res) => {
+    const { id } = req.params;
+    const { contact_ids, replace = false } = req.body;
+
+    if (replace) {
+      await db.query(`DELETE FROM campaign_recipients WHERE campaign_id=?`, [id]);
+    }
+    const rows = contact_ids.map(cid => [id, cid]);
+    await db.query(
+      `INSERT IGNORE INTO campaign_recipients (campaign_id, contact_id, send_status, created_at)
+       VALUES ${rows.map(()=>'(?, ?, "queued", NOW())').join(',')}`,
+      rows.flat()
+    );
+
+    const [[cnt]] = await db.query(`SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?`, [id]);
+    res.json({ recipients_total: Number(cnt.total) });
+  })
+);
+
+
+router.post('/marketing/campaigns/:id/ready',
+  [ param('id').isInt().toInt() ],
+  asyncH(async (req, res) => {
+    const { id } = req.params;
+
+    const [[camp]] = await db.query(
+      `SELECT id, gym_id, status FROM newsletter_campaigns WHERE id=?`, [id]
+    );
+    if (!camp) return res.status(404).json({ error: 'campaign_not_found' });
+    if (camp.status === 'sent') return res.status(400).json({ error: 'already_sent' });
+
+    // se non hai ancora scelto destinatari, allora materializza tutti i subscribed
+    const [[has]] = await db.query(
+      `SELECT COUNT(*) AS c FROM campaign_recipients WHERE campaign_id=?`, [id]
+    );
+    if (Number(has.c) === 0) {
+      await db.query(`
+        INSERT IGNORE INTO campaign_recipients (campaign_id, contact_id, send_status, created_at)
+        SELECT ?, mc.id, 'queued', NOW()
+        FROM marketing_contacts mc
+        WHERE mc.gym_id = ? AND mc.subscribed = 1
+      `, [id, camp.gym_id]);
+    }
+
+    await db.query(`UPDATE newsletter_campaigns SET status='ready', updated_at=NOW() WHERE id=?`, [id]);
+
+    const [[tot]] = await db.query(
+      `SELECT COUNT(*) AS queued FROM campaign_recipients WHERE campaign_id=? AND send_status='queued'`, [id]
+    );
+    res.json({ ok:true, queued:Number(tot.queued) });
+  })
+);
+
+
 /**
  * TEMPLATE
  */
