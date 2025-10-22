@@ -92,7 +92,7 @@ router.get('/marketing/contacts',
       wh.push('(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
       pr.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
-    const [rows] = await db.query(
+    const [rows] = await pool.query(
       `SELECT mc.id, mc.user_id, mc.subscribed, mc.tags, u.full_name, u.email, u.phone
        FROM marketing_contacts mc
        JOIN users u ON u.id = mc.user_id
@@ -119,16 +119,16 @@ router.post('/marketing/campaigns/:id/recipients',
     const { contact_ids, replace = false } = req.body;
 
     if (replace) {
-      await db.query(`DELETE FROM campaign_recipients WHERE campaign_id=?`, [id]);
+      await pool.query(`DELETE FROM campaign_recipients WHERE campaign_id=?`, [id]);
     }
     const rows = contact_ids.map(cid => [id, cid]);
-    await db.query(
+    await pool.query(
       `INSERT IGNORE INTO campaign_recipients (campaign_id, contact_id, send_status, created_at)
        VALUES ${rows.map(()=>'(?, ?, "queued", NOW())').join(',')}`,
       rows.flat()
     );
 
-    const [[cnt]] = await db.query(`SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?`, [id]);
+    const [[cnt]] = await pool.query(`SELECT COUNT(*) AS total FROM campaign_recipients WHERE campaign_id=?`, [id]);
     res.json({ recipients_total: Number(cnt.total) });
   })
 );
@@ -139,18 +139,18 @@ router.post('/marketing/campaigns/:id/ready',
   asyncH(async (req, res) => {
     const { id } = req.params;
 
-    const [[camp]] = await db.query(
+    const [[camp]] = await pool.query(
       `SELECT id, gym_id, status FROM newsletter_campaigns WHERE id=?`, [id]
     );
     if (!camp) return res.status(404).json({ error: 'campaign_not_found' });
     if (camp.status === 'sent') return res.status(400).json({ error: 'already_sent' });
 
     // se non hai ancora scelto destinatari, allora materializza tutti i subscribed
-    const [[has]] = await db.query(
+    const [[has]] = await pool.query(
       `SELECT COUNT(*) AS c FROM campaign_recipients WHERE campaign_id=?`, [id]
     );
     if (Number(has.c) === 0) {
-      await db.query(`
+      await pool.query(`
         INSERT IGNORE INTO campaign_recipients (campaign_id, contact_id, send_status, created_at)
         SELECT ?, mc.id, 'queued', NOW()
         FROM marketing_contacts mc
@@ -158,9 +158,9 @@ router.post('/marketing/campaigns/:id/ready',
       `, [id, camp.gym_id]);
     }
 
-    await db.query(`UPDATE newsletter_campaigns SET status='ready', updated_at=NOW() WHERE id=?`, [id]);
+    await pool.query(`UPDATE newsletter_campaigns SET status='ready', updated_at=NOW() WHERE id=?`, [id]);
 
-    const [[tot]] = await db.query(
+    const [[tot]] = await pool.query(
       `SELECT COUNT(*) AS queued FROM campaign_recipients WHERE campaign_id=? AND send_status='queued'`, [id]
     );
     res.json({ ok:true, queued:Number(tot.queued) });
@@ -215,7 +215,7 @@ router.post('/marketing/campaigns/:id/send',
     const PER_HOUR = Number(process.env.MAILS_PER_HOUR || 100);
     const BATCH_SIZE = Number(process.env.MAIL_BATCH_SIZE || 50);
 
-    const [[camp]] = await db.query(`
+    const [[camp]] = await pool.query(`
       SELECT c.*, t.html AS tpl_html, t.subject AS tpl_subject
       FROM newsletter_campaigns c
       LEFT JOIN newsletter_templates t ON t.id = c.template_id
@@ -223,7 +223,7 @@ router.post('/marketing/campaigns/:id/send',
     if (!camp) return res.status(404).json({ error: 'campaign_not_found' });
 
     // 1) Quante email abbiamo spedito nell’ultima ora (su TUTTE le campagne)
-    const [[countRow]] = await db.query(`
+    const [[countRow]] = await pool.query(`
       SELECT COUNT(*) AS sent_last_hour
       FROM campaign_recipients
       WHERE send_status='sent' 
@@ -234,7 +234,7 @@ router.post('/marketing/campaigns/:id/send',
 
     if (remainingInWindow <= 0) {
       // Calcolo quando si sblocca la finestra: prendo la più vecchia send_at nell’ultima ora e aggiungo 60 min
-      const [[oldestRow]] = await db.query(`
+      const [[oldestRow]] = await pool.query(`
         SELECT MIN(send_at) AS oldest
         FROM campaign_recipients
         WHERE send_status='sent'
@@ -252,7 +252,7 @@ router.post('/marketing/campaigns/:id/send',
 
     // 2) Prendo solo i destinatari ancora in coda di QUESTA campagna, limitando al minimo fra batch e quota residua
     const take = Math.min(remainingInWindow, BATCH_SIZE);
-    const [recipients] = await db.query(`
+    const [recipients] = await pool.query(`
       SELECT mc.id AS contact_id, u.email
       FROM campaign_recipients cr
       JOIN marketing_contacts mc ON mc.id = cr.contact_id
@@ -279,14 +279,14 @@ router.post('/marketing/campaigns/:id/send',
           html,
           text: html ? html.replace(/<[^>]+>/g, '') : null,
         });
-        await db.query(`
+        await pool.query(`
           UPDATE campaign_recipients 
           SET send_status='sent', send_at=NOW(), last_error=NULL 
           WHERE campaign_id=? AND contact_id=?`, [id, r.contact_id]);
         sent++;
       } catch (e) {
         failed++;
-        await db.query(`
+        await pool.query(`
           UPDATE campaign_recipients 
           SET send_status='failed', last_error=? 
           WHERE campaign_id=? AND contact_id=?`, [e.message.slice(0,490), id, r.contact_id]);
@@ -294,20 +294,20 @@ router.post('/marketing/campaigns/:id/send',
     }
 
     // Se non ci sono più queued → segna campagna sent
-    const [[remain]] = await db.query(`
+    const [[remain]] = await pool.query(`
       SELECT COUNT(*) AS queued_remaining
       FROM campaign_recipients 
       WHERE campaign_id=? AND send_status='queued'`, [id]);
 
     if (Number(remain.queued_remaining) === 0) {
-      await db.query(`UPDATE newsletter_campaigns SET status='sent', sent_at=NOW() WHERE id=?`, [id]);
+      await pool.query(`UPDATE newsletter_campaigns SET status='sent', sent_at=NOW() WHERE id=?`, [id]);
     } else {
       // altrimenti metti "sending" per chiarezza
-      await db.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [id]);
+      await pool.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [id]);
     }
 
     // info finestra successiva
-    const [[countRow2]] = await db.query(`
+    const [[countRow2]] = await pool.query(`
       SELECT COUNT(*) AS sent_last_hour
       FROM campaign_recipients
       WHERE send_status='sent' 
@@ -316,7 +316,7 @@ router.post('/marketing/campaigns/:id/send',
     const remainQuota = Math.max(0, PER_HOUR - Number(countRow2.sent_last_hour));
     let nextResetAt = null;
     if (remainQuota === 0) {
-      const [[oldestRow2]] = await db.query(`
+      const [[oldestRow2]] = await pool.query(`
         SELECT MIN(send_at) AS oldest
         FROM campaign_recipients
         WHERE send_status='sent'
@@ -346,14 +346,14 @@ router.post('/marketing/campaigns/:id/ready',
     const { id } = req.params;
 
     // 1) prendo campagna
-    const [[camp]] = await db.query(
+    const [[camp]] = await pool.query(
       `SELECT id, gym_id, status FROM newsletter_campaigns WHERE id=?`, [id]
     );
     if (!camp) return res.status(404).json({ error: 'campaign_not_found' });
     if (camp.status === 'sent') return res.status(400).json({ error: 'already_sent' });
 
     // 2) materializzo destinatari solo se non esistono
-    await db.query(`
+    await pool.query(`
       INSERT IGNORE INTO campaign_recipients (campaign_id, contact_id, send_status, created_at)
       SELECT ?, mc.id, 'queued', NOW()
       FROM marketing_contacts mc
@@ -361,9 +361,9 @@ router.post('/marketing/campaigns/:id/ready',
     `, [id, camp.gym_id]);
 
     // 3) metto stato 'ready' (il worker farà il resto)
-    await db.query(`UPDATE newsletter_campaigns SET status='ready', updated_at=NOW() WHERE id=?`, [id]);
+    await pool.query(`UPDATE newsletter_campaigns SET status='ready', updated_at=NOW() WHERE id=?`, [id]);
 
-    const [[tot]] = await db.query(
+    const [[tot]] = await pool.query(
       `SELECT COUNT(*) AS queued FROM campaign_recipients WHERE campaign_id=? AND send_status='queued'`, [id]
     );
 
