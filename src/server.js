@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { setupSwagger } = require('./swagger');
 const app = express();
 const { init: initMq } = require('./mq');
+const { startCampaignSender } = require('./workers/campaignSender');
 
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',
@@ -59,6 +60,11 @@ app.use('/extras', require('./routes/extras'));
 app.use('/extras_gym', require('./routes/gym_extras'));
 app.use('/equipment', require('./routes/equipment'));
 app.use('/capacity', require('./routes/gym_capacity'));
+app.use('/users', require('./routes/users'));
+app.use('/newsletter', require('./routes/marketing'));
+app.use('/newsletter', require('./routes/offers'));
+
+startCampaignSender();
 
 (async () => {
   try {
