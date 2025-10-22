@@ -1,7 +1,7 @@
 // src/routes/equipment.js
 const express = require('express');
 const router = express.Router();
-const db = require('../db'); // deve esportare { query(sql, params) } o pool
+const { pool } = require('../db');
 const { body, query, param, validationResult } = require('express-validator');
 
 /** helper */
@@ -26,7 +26,7 @@ router.get('/categories',
     if (search) { wh.push('name LIKE ?'); pr.push(`%${search}%`); }
     if (parent_id) { wh.push('parent_id = ?'); pr.push(parent_id); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT id, name, parent_id, created_at, updated_at
        FROM equipment_categories ${where}
        ORDER BY name ASC
@@ -42,12 +42,12 @@ router.post('/categories',
   asyncH(async (req, res) => {
     const v = validationResult(req); if (!v.isEmpty()) return bad(res, v.array());
     const { name, parent_id = null } = req.body;
-    const r = await db.query(
+    const r = await pool.query(
       `INSERT INTO equipment_categories (name, parent_id, created_at, updated_at)
        VALUES (?, ?, NOW(), NOW())`,
       [name, parent_id]
     );
-    const created = await db.query(`SELECT * FROM equipment_categories WHERE id=?`, [r.insertId]);
+    const created = await pool.query(`SELECT * FROM equipment_categories WHERE id=?`, [r.insertId]);
     res.status(201).json({ data: created[0] });
   })
 );
@@ -63,8 +63,8 @@ router.patch('/categories/:id',
     if (parent_id !== undefined) { sets.push('parent_id=?'); pr.push(parent_id); }
     if (!sets.length) return bad(res, [{ msg: 'Nothing to update' }]);
     pr.push(id);
-    await db.query(`UPDATE equipment_categories SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
-    const row = await db.query(`SELECT * FROM equipment_categories WHERE id=?`, [id]);
+    await pool.query(`UPDATE equipment_categories SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
+    const row = await pool.query(`SELECT * FROM equipment_categories WHERE id=?`, [id]);
     ok(res, row[0]);
   })
 );
@@ -74,7 +74,7 @@ router.delete('/categories/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    await db.query(`DELETE FROM equipment_categories WHERE id=?`, [id]);
+    await pool.query(`DELETE FROM equipment_categories WHERE id=?`, [id]);
     res.status(204).send();
   })
 );
@@ -96,7 +96,7 @@ router.get('/models',
     if (is_track_per_item !== undefined) { wh.push('m.is_track_per_item = ?'); pr.push(is_track_per_item ? 1 : 0); }
     if (search) { wh.push('(m.model_name LIKE ? OR m.brand LIKE ? OR m.sku LIKE ?)'); pr.push(`%${search}%`, `%${search}%`, `%${search}%`); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT m.*, c.name AS category_name
        FROM equipment_models m
        JOIN equipment_categories c ON c.id = m.category_id
@@ -123,7 +123,7 @@ router.post('/models',
     } = req.body;
 
     // transazione (assume db.query gestisce connessione/pool; altrimenti usa getConnection)
-    const conn = await db.getConnection();
+    const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       const r = await conn.query(
@@ -148,7 +148,7 @@ router.post('/models',
       }
 
       await conn.commit();
-      const created = await db.query(`SELECT * FROM equipment_models WHERE id=?`, [modelId]);
+      const created = await pool.query(`SELECT * FROM equipment_models WHERE id=?`, [modelId]);
       res.status(201).json({ data: created[0] });
     } catch (e) {
       await conn.rollback();
@@ -174,8 +174,8 @@ router.patch('/models/:id',
     }
     if (!sets.length) return bad(res, [{ msg: 'Nothing to update' }]);
     pr.push(id);
-    await db.query(`UPDATE equipment_models SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
-    const row = await db.query(`SELECT * FROM equipment_models WHERE id=?`, [id]);
+    await pool.query(`UPDATE equipment_models SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
+    const row = await pool.query(`SELECT * FROM equipment_models WHERE id=?`, [id]);
     ok(res, row[0]);
   })
 );
@@ -185,7 +185,7 @@ router.delete('/models/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    await db.query(`DELETE FROM equipment_models WHERE id=?`, [id]);
+    await pool.query(`DELETE FROM equipment_models WHERE id=?`, [id]);
     res.status(204).send();
   })
 );
@@ -195,7 +195,7 @@ router.get('/models/:id/specs',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT id, model_id, spec_key, spec_value, created_at, updated_at
        FROM equipment_model_specs WHERE model_id=? ORDER BY spec_key ASC`, [id]
     );
@@ -209,7 +209,7 @@ router.put('/models/:id/specs',
   asyncH(async (req, res) => {
     const { id } = req.params;
     const specs = Array.isArray(req.body) ? req.body : [];
-    const conn = await db.getConnection();
+    const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await conn.query(`DELETE FROM equipment_model_specs WHERE model_id=?`, [id]);
@@ -222,7 +222,7 @@ router.put('/models/:id/specs',
         );
       }
       await conn.commit();
-      const out = await db.query(`SELECT * FROM equipment_model_specs WHERE model_id=?`, [id]);
+      const out = await pool.query(`SELECT * FROM equipment_model_specs WHERE model_id=?`, [id]);
       ok(res, out);
     } catch (e) {
       await conn.rollback(); throw e;
@@ -251,7 +251,7 @@ router.get('/assets',
     if (status_enum) { wh.push('a.status_enum = ?'); pr.push(status_enum); }
     if (q) { wh.push('(a.tag_code LIKE ? OR a.serial_number LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
 
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT a.*, m.brand, m.model_name, c.name AS category_name, l.name AS location_name
        FROM equipment_assets a
        JOIN equipment_models m ON m.id = a.model_id
@@ -281,7 +281,7 @@ router.post('/assets',
       condition_enum = 'good', status_enum = 'active', notes = null
     } = req.body;
 
-    const r = await db.query(
+    const r = await pool.query(
       `INSERT INTO equipment_assets
        (gym_id, location_id, model_id, tag_code, serial_number, purchase_date, purchase_price_cents,
         condition_enum, status_enum, notes, created_at, updated_at)
@@ -289,7 +289,7 @@ router.post('/assets',
       [gym_id, location_id, model_id, tag_code, serial_number, purchase_date, purchase_price_cents,
         condition_enum, status_enum, notes]
     );
-    const created = await db.query(`SELECT * FROM equipment_assets WHERE id=?`, [r.insertId]);
+    const created = await pool.query(`SELECT * FROM equipment_assets WHERE id=?`, [r.insertId]);
     res.status(201).json({ data: created[0] });
   })
 );
@@ -304,8 +304,8 @@ router.patch('/assets/:id',
     for (const k of allowed) if (req.body[k] !== undefined) { sets.push(`${k}=?`); pr.push(req.body[k]); }
     if (!sets.length) return bad(res, [{ msg: 'Nothing to update' }]);
     pr.push(id);
-    await db.query(`UPDATE equipment_assets SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
-    const row = await db.query(`SELECT * FROM equipment_assets WHERE id=?`, [id]);
+    await pool.query(`UPDATE equipment_assets SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
+    const row = await pool.query(`SELECT * FROM equipment_assets WHERE id=?`, [id]);
     ok(res, row[0]);
   })
 );
@@ -314,7 +314,7 @@ router.patch('/assets/:id',
 router.delete('/assets/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
-    await db.query(`DELETE FROM equipment_assets WHERE id=?`, [req.params.id]);
+    await pool.query(`DELETE FROM equipment_assets WHERE id=?`, [req.params.id]);
     res.status(204).send();
   })
 );
@@ -337,7 +337,7 @@ router.get('/stock',
     if (model_id) { wh.push('s.model_id=?'); pr.push(model_id); }
     if (q) { wh.push('(s.variant_label LIKE ? OR m.model_name LIKE ? OR m.brand LIKE ?)'); pr.push(`%${q}%`, `%${q}%`, `%${q}%`); }
 
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT s.*, m.brand, m.model_name, c.name AS category_name, l.name AS location_name
        FROM equipment_stock s
        JOIN equipment_models m ON m.id = s.model_id
@@ -362,12 +362,12 @@ router.post('/stock',
   asyncH(async (req, res) => {
     const v = validationResult(req); if (!v.isEmpty()) return bad(res, v.array());
     const { gym_id, location_id = null, model_id, variant_label = null, quantity = 0, min_quantity = 0 } = req.body;
-    const r = await db.query(
+    const r = await pool.query(
       `INSERT INTO equipment_stock (gym_id, location_id, model_id, variant_label, quantity, min_quantity, created_at, updated_at)
        VALUES (?,?,?,?,?,?,NOW(),NOW())`,
       [gym_id, location_id, model_id, variant_label, quantity, min_quantity]
     );
-    const row = await db.query(`SELECT * FROM equipment_stock WHERE id=?`, [r.insertId]);
+    const row = await pool.query(`SELECT * FROM equipment_stock WHERE id=?`, [r.insertId]);
     res.status(201).json({ data: row[0] });
   })
 );
@@ -381,7 +381,7 @@ router.patch('/stock/:id',
 
     // increment atomico
     if (quantity_delta !== undefined) {
-      await db.query(`UPDATE equipment_stock SET quantity = GREATEST(0, quantity + ?), updated_at=NOW() WHERE id=?`, [Number(quantity_delta), id]);
+      await pool.query(`UPDATE equipment_stock SET quantity = GREATEST(0, quantity + ?), updated_at=NOW() WHERE id=?`, [Number(quantity_delta), id]);
     }
 
     const sets = []; const pr = [];
@@ -391,9 +391,9 @@ router.patch('/stock/:id',
     if (location_id !== undefined) { sets.push('location_id=?'); pr.push(location_id); }
     if (sets.length) {
       pr.push(id);
-      await db.query(`UPDATE equipment_stock SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
+      await pool.query(`UPDATE equipment_stock SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
     }
-    const row = await db.query(`SELECT * FROM equipment_stock WHERE id=?`, [id]);
+    const row = await pool.query(`SELECT * FROM equipment_stock WHERE id=?`, [id]);
     ok(res, row[0]);
   })
 );
@@ -402,7 +402,7 @@ router.patch('/stock/:id',
 router.delete('/stock/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
-    await db.query(`DELETE FROM equipment_stock WHERE id=?`, [req.params.id]);
+    await pool.query(`DELETE FROM equipment_stock WHERE id=?`, [req.params.id]);
     res.status(204).send();
   })
 );
@@ -411,7 +411,7 @@ router.delete('/stock/:id',
 router.get('/stock/:id/specs',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
-    const rows = await db.query(
+    const rows = await pool.query(
       `SELECT id, stock_id, spec_key, spec_value, created_at, updated_at
        FROM equipment_stock_specs WHERE stock_id=? ORDER BY spec_key ASC`, [req.params.id]
     );
@@ -425,7 +425,7 @@ router.put('/stock/:id/specs',
   asyncH(async (req, res) => {
     const stockId = req.params.id;
     const specs = Array.isArray(req.body) ? req.body : [];
-    const conn = await db.getConnection();
+    const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await conn.query(`DELETE FROM equipment_stock_specs WHERE stock_id=?`, [stockId]);
@@ -438,7 +438,7 @@ router.put('/stock/:id/specs',
         );
       }
       await conn.commit();
-      const out = await db.query(`SELECT * FROM equipment_stock_specs WHERE stock_id=?`, [stockId]);
+      const out = await pool.query(`SELECT * FROM equipment_stock_specs WHERE stock_id=?`, [stockId]);
       ok(res, out);
     } catch (e) {
       await conn.rollback(); throw e;
