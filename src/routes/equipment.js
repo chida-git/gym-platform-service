@@ -9,6 +9,15 @@ const asyncH = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 const ok = (res, data, meta) => res.json({ data, meta });
 const bad = (res, errors, code = 400) => res.status(code).json({ errors });
 
+function normalizeRow(row) {
+  const out = {};
+  for (const k of Object.keys(row)) {
+    const v = row[k];
+    out[k] = Buffer.isBuffer(v) ? v.toString() : v;
+  }
+  return out;
+}
+
 /* ----------------------------------
  * CATEGORIES
  * ----------------------------------*/
@@ -96,15 +105,21 @@ router.get('/models',
     if (is_track_per_item !== undefined) { wh.push('m.is_track_per_item = ?'); pr.push(is_track_per_item ? 1 : 0); }
     if (search) { wh.push('(m.model_name LIKE ? OR m.brand LIKE ? OR m.sku LIKE ?)'); pr.push(`%${search}%`, `%${search}%`, `%${search}%`); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
-    const rows = await pool.query(
-      `SELECT m.*, c.name AS category_name
-       FROM equipment_models m
-       JOIN equipment_categories c ON c.id = m.category_id
-       ${where}
-       ORDER BY m.model_name ASC
-       LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
-    );
-    ok(res, rows, { limit: Number(limit), offset: Number(offset) });
+    const rows = await db.query(
+  `SELECT
+     m.id, m.category_id, m.brand, m.model_name, m.sku, m.description, m.photo_url,
+     m.is_track_per_item, m.created_at, m.updated_at,
+     c.name AS category_name
+   FROM equipment_models m
+   JOIN equipment_categories c ON c.id = m.category_id
+   ${where}
+   ORDER BY m.model_name ASC
+   LIMIT ? OFFSET ?`, [...pr, Number(limit), Number(offset)]
+);
+
+const data = rows.map(r => normalizeRow(r));
+
+    ok(res, data, { limit: Number(limit), offset: Number(offset) });
   })
 );
 
