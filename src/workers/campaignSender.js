@@ -104,6 +104,7 @@ const [recipients] = await pool.query(`
 
   let sent = 0, failed = 0;
 for (const r of recipients) {
+  console.log("r", r)
   try {
     await sendMail({
       to: r.email,
