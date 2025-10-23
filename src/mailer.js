@@ -19,8 +19,8 @@ transporter.verify().then(() => {
 
 async function sendMail({ to, subject, html, text, from_name, from_email }) {
   const fromAddr = from_email || process.env.SMTP_USER; // Aruba spesso richiede from = user
-  const from = from_name ? `${from_name} <${fromAddr}>` : fromAddr;
-
+  const account = process.env.SMTP_USER;
+  const from = from_name ? `${from_name} <${account}>` : account;
   const info = await transporter.sendMail({
     from,
     to,
