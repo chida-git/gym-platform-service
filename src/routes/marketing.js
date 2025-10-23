@@ -90,7 +90,9 @@ router.get('/marketing/contacts',
     const { gym_id, search, only_subscribed, only_external, limit=50, offset=0 } = req.query;
     const wh = ['mc.gym_id = ?']; const pr=[gym_id];
     if (typeof only_subscribed !== 'undefined') { wh.push('mc.subscribed = ?'); pr.push(only_subscribed); }
-    if (typeof only_external !== 'undefined') { wh.push('mc.user_id IS ' + (only_external ? 'NULL' : 'NOT NULL')); }
+    if (Number(only_external) === 1) {
+  wh.push('mc.user_id IS NULL');
+}
     if (search) {
       wh.push('(' +
         'COALESCE(u.full_name, mc.full_name, "") LIKE ? OR ' +
