@@ -95,18 +95,17 @@ const [recipients] = await pool.query(`
   const innerHtml = camp.content_html || camp.tpl_html || '';
   const subject = camp.subject || camp.tpl_subject || '(senza oggetto)';
 
-  const { html, text } = renderEmail({
+  let sent = 0, failed = 0;
+
+for (const r of recipients) {
+  try {
+      const { html, text } = renderEmail({
   subject,
   contentHtml: innerHtml,
   unsubscribeUrl: 'https://gymspot.it/unsub?c=' + r.contact_id, // esempio
   webviewUrl: 'https://gymspot.it/campaign/' + campaignId + '/view'
 });
 
-  let sent = 0, failed = 0;
-  console.log("recipients", recipients)
-for (const r of recipients) {
-  console.log("r", r)
-  try {
     await sendMail({
       to: r.email,
       subject,
