@@ -99,20 +99,26 @@ const [recipients] = await pool.query(`
 
 for (const r of recipients) {
   try {
-      const { html, text } = renderEmail({
-  subject,
-  contentHtml: innerHtml,
-  unsubscribeUrl: 'https://gymspot.it/unsub?c=' + r.contact_id, // esempio
-  webviewUrl: 'https://gymspot.it/campaign/' + campaignId + '/view'
-});
+    const { html, text } = renderEmail({
+      subject,
+      contentHtml: innerHtml,
+      unsubscribeUrl: 'https://gymspot.it/unsub?c=' + r.contact_id,
+      webviewUrl: 'https://gymspot.it/campaign/' + campaignId + '/view'
+    });
 
-    await sendMail({
+    // 👇 log utile
+    console.log(`[send] campaign ${campaignId} -> ${r.email}`);
+
+    const info = await sendMail({
       to: r.email,
       subject,
       html,
       text,
+      from_name: camp.from_name,
+      from_email: camp.from_email
     });
 
+    // se arriviamo qui, SMTP ha accettato (controllato dal mailer)
     await pool.query(`
       UPDATE campaign_recipients
       SET send_status='sent', send_at=NOW(), last_error=NULL
@@ -120,7 +126,9 @@ for (const r of recipients) {
       [campaignId, r.contact_id]
     );
     sent++;
+
   } catch (e) {
+    console.error('[send error]', r.email, e.message);
     await pool.query(`
       UPDATE campaign_recipients
       SET send_status='failed', last_error=?
@@ -131,15 +139,24 @@ for (const r of recipients) {
   }
 }
 
-  const [[remain]] = await pool.query(`
-    SELECT COUNT(*) AS queued_remaining
-    FROM campaign_recipients WHERE campaign_id=? AND send_status='queued'`, [campaignId]);
+const [[remain]] = await pool.query(`
+  SELECT 
+    SUM(send_status='queued')  AS queued_remaining,
+    SUM(send_status='failed')  AS failed_count
+  FROM campaign_recipients
+  WHERE campaign_id=?`, [campaignId]);
 
-  if (Number(remain.queued_remaining) === 0) {
-    await pool.query(`UPDATE newsletter_campaigns SET status='sent', sent_at=NOW() WHERE id=?`, [campaignId]);
-  } else {
-    await pool.query(`UPDATE newsletter_campaigns SET updated_at=NOW() WHERE id=?`, [campaignId]);
-  }
+const queuedRemaining = Number(remain.queued_remaining || 0);
+const failedCount     = Number(remain.failed_count || 0);
+
+if (queuedRemaining === 0) {
+  // se ci sono failed, NON metto "sent", meglio "paused" o "sent" + flag
+  const nextStatus = failedCount > 0 ? 'paused' : 'sent';
+  await pool.query(`UPDATE newsletter_campaigns SET status=?, sent_at=IF(?='sent', NOW(), sent_at) WHERE id=?`,
+    [nextStatus, nextStatus, campaignId]);
+} else {
+  await pool.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [campaignId]);
+}
 
   return { sent, failed, remaining: Number(remain.queued_remaining) };
 }

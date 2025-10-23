@@ -11,15 +11,37 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-async function sendMail({ to, subject, html, text }) {
-  const mailOptions = {
-    from: process.env.MAIL_FROM,
+transporter.verify().then(() => {
+  console.log('[mailer] SMTP ready');
+}).catch(err => {
+  console.error('[mailer] SMTP verify failed:', err.message);
+});
+
+async function sendMail({ to, subject, html, text, from_name, from_email }) {
+  const fromAddr = from_email || process.env.SMTP_USER; // Aruba spesso richiede from = user
+  const from = from_name ? `${from_name} <${fromAddr}>` : fromAddr;
+
+  const info = await transporter.sendMail({
+    from,
     to,
     subject,
-    text,
     html,
-  };
-  return transporter.sendMail(mailOptions);
+    text,
+    envelope: { from: fromAddr, to } // “MAIL FROM” effettivo = account Aruba
+  });
+
+  // 🔒 check “duro”: rifiuta se l’SMTP non ha accettato il destinatario
+  const accepted = Array.isArray(info.accepted) ? info.accepted.length : 0;
+  const rejected = Array.isArray(info.rejected) ? info.rejected.length : 0;
+
+  if (accepted === 0 || rejected > 0) {
+    const reason = `SMTP not accepted: accepted=${accepted}, rejected=${rejected}, response=${info.response || ''}`;
+    const e = new Error(reason);
+    e.smtpInfo = info;
+    throw e;
+  }
+
+  return info;
 }
 
 module.exports = { sendMail };
