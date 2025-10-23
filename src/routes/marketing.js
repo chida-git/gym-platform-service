@@ -118,10 +118,10 @@ router.post('/marketing/contacts/external',
     const { gym_id, email, full_name=null, phone=null, tags=null, subscribed=true } = req.body;
 
     // 👉 auto-link al users se esiste lo stesso email nella stessa palestra
-    const [[u]] = await db.query(`SELECT id FROM users WHERE gym_id=? AND email=?`, [gym_id, email]);
+    const [[u]] = await pool.query(`SELECT id FROM users WHERE gym_id=? AND email=?`, [gym_id, email]);
     const user_id = u ? u.id : null;
 
-    await db.query(`
+    await pool.query(`
       INSERT INTO marketing_contacts (gym_id, user_id, email, full_name, phone, tags, subscribed, consent_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, IF(?=1, NOW(), NULL), NOW())
       ON DUPLICATE KEY UPDATE
