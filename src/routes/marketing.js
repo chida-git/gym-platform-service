@@ -492,9 +492,9 @@ router.delete('/marketing/campaigns/:id',
   asyncH(async (req, res) => {
     const { id } = req.params
     // rimuovi record collegati (se non hai FK ON DELETE CASCADE)
-    await db.query(`DELETE FROM campaign_offers WHERE campaign_id=?`, [id])
-    await db.query(`DELETE FROM campaign_recipients WHERE campaign_id=?`, [id])
-    await db.query(`DELETE FROM campaign_events WHERE campaign_id=?`, [id])
+    await pool.query(`DELETE FROM campaign_offers WHERE campaign_id=?`, [id])
+    await pool.query(`DELETE FROM campaign_recipients WHERE campaign_id=?`, [id])
+    await pool.query(`DELETE FROM campaign_events WHERE campaign_id=?`, [id])
     const [r] = await db.query(`DELETE FROM newsletter_campaigns WHERE id=?`, [id])
     res.json({ removed: r.affectedRows })
   })
