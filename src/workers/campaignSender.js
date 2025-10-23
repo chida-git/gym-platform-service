@@ -57,7 +57,7 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
   if (!camp) return { sent:0, failed:0, remaining:0 };
   console.log(".1")
   // destinatari queued
-const [recipients] = await db.query(`
+const [recipients] = await pool.query(`
   SELECT 
     mc.id AS contact_id,
     COALESCE(u.email, mc.email)       AS email,
@@ -112,7 +112,7 @@ for (const r of recipients) {
       text,
     });
 
-    await db.query(`
+    await pool.query(`
       UPDATE campaign_recipients
       SET send_status='sent', send_at=NOW(), last_error=NULL
       WHERE campaign_id=? AND contact_id=?`,
@@ -120,7 +120,7 @@ for (const r of recipients) {
     );
     sent++;
   } catch (e) {
-    await db.query(`
+    await pool.query(`
       UPDATE campaign_recipients
       SET send_status='failed', last_error=?
       WHERE campaign_id=? AND contact_id=?`,
