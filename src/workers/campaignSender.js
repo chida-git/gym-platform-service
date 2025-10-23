@@ -127,6 +127,7 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
 /** Loop principale */
 async function tick() {
   try {
+    console.log("start")
     // quota oraria residua
     const used = await sentInLastHour();
     const remainingWindow = Math.max(0, PER_HOUR - used);
