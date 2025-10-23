@@ -1,6 +1,7 @@
 // src/workers/campaignSender.js
 const { pool } = require('../db');
 const { sendMail } = require('../mailer');
+const { renderEmail } = require('../email/layout');
 
 const PER_HOUR  = Number(process.env.MAILS_PER_HOUR || 100);
 const BATCH     = Number(process.env.MAIL_BATCH_SIZE || 50);
@@ -82,8 +83,15 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
     await pool.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [campaignId]);
   }
 
-  const html = camp.content_html || camp.tpl_html || '';
+  const innerHtml = camp.content_html || camp.tpl_html || '';
   const subject = camp.subject || camp.tpl_subject || '(senza oggetto)';
+
+  const { html, text } = renderEmail({
+  subject,
+  contentHtml: innerHtml,
+  unsubscribeUrl: 'https://gymspot.it/unsub?c=' + r.contact_id, // esempio
+  webviewUrl: 'https://gymspot.it/campaign/' + campaignId + '/view'
+});
 
   let sent = 0, failed = 0;
   for (const r of recipients) {
