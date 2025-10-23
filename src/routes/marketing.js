@@ -76,30 +76,45 @@ router.patch('/marketing/contacts/:id',
 );
 
 // GET /marketing/contacts?gym_id=1&search=...&subscribed=1&limit=50&offset=0
+// GET /marketing/contacts?gym_id=1&search=&only_subscribed=1&only_external=0&limit=50&offset=0
 router.get('/marketing/contacts',
   [
     query('gym_id').isInt().toInt(),
     query('search').optional().isString().trim(),
-    query('subscribed').optional().isInt({ min:0, max:1 }).toInt(),
+    query('only_subscribed').optional().isInt({ min:0, max:1 }).toInt(),
+    query('only_external').optional().isInt({ min:0, max:1 }).toInt(),
     query('limit').optional().isInt({ min:1, max:200 }).toInt(),
     query('offset').optional().isInt({ min:0 }).toInt(),
   ],
   asyncH(async (req, res) => {
-    const { gym_id, search, subscribed, limit=50, offset=0 } = req.query;
+    const { gym_id, search, only_subscribed, only_external, limit=50, offset=0 } = req.query;
     const wh = ['mc.gym_id = ?']; const pr=[gym_id];
-    if (typeof subscribed !== 'undefined') { wh.push('mc.subscribed = ?'); pr.push(subscribed); }
+    if (typeof only_subscribed !== 'undefined') { wh.push('mc.subscribed = ?'); pr.push(only_subscribed); }
+    if (typeof only_external !== 'undefined') { wh.push('mc.user_id IS ' + (only_external ? 'NULL' : 'NOT NULL')); }
     if (search) {
-      wh.push('(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
+      wh.push('(' +
+        'COALESCE(u.full_name, mc.full_name, "") LIKE ? OR ' +
+        'COALESCE(u.email, mc.email, "") LIKE ? OR ' +
+        'COALESCE(u.phone, mc.phone, "") LIKE ?' +
+      ')');
       pr.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
+
     const [rows] = await pool.query(
-      `SELECT mc.id, mc.user_id, mc.subscribed, mc.tags, u.full_name, u.email, u.phone
+      `SELECT
+         mc.id,
+         mc.user_id,
+         mc.subscribed,
+         mc.tags,
+         COALESCE(u.full_name, mc.full_name) AS full_name,
+         COALESCE(u.email, mc.email)       AS email,
+         COALESCE(u.phone, mc.phone)       AS phone
        FROM marketing_contacts mc
-       JOIN users u ON u.id = mc.user_id
+       LEFT JOIN users u ON u.id = mc.user_id
        WHERE ${wh.join(' AND ')}
        ORDER BY mc.id DESC
        LIMIT ? OFFSET ?`,
-       [...pr, Number(limit), Number(offset)]
+      [...pr, Number(limit), Number(offset)]
     );
     res.json(rows);
   })
