@@ -132,7 +132,7 @@ async function tick() {
     const used = await sentInLastHour();
     const remainingWindow = Math.max(0, PER_HOUR - used);
     if (remainingWindow <= 0) return; // rate-limited: aspetto prossimo tick
-
+    console.log(remainingWindow)
     // prendo una campagna da lavorare
     const cid = await pickCampaign();
     if (!cid) return;
