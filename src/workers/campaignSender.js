@@ -55,7 +55,7 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
     LEFT JOIN newsletter_templates t ON t.id = c.template_id
     WHERE c.id=?`, [campaignId]);
   if (!camp) return { sent:0, failed:0, remaining:0 };
-
+  console.log(".1")
   // destinatari queued
   const [recipients] = await pool.query(`
     SELECT mc.id AS contact_id, u.email
@@ -66,7 +66,9 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
     ORDER BY cr.id ASC
     LIMIT ?`, [campaignId, quotaAllowed]
   );
-
+    console.log(".campaignId", campaignId)
+      console.log(".quotaAllowed", quotaAllowed)
+  console.log(".2")
   if (!recipients.length) {
     // nulla da inviare: se non ci sono più queued → chiudi campagna
     const [[remain]] = await pool.query(`
@@ -77,7 +79,7 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
     }
     return { sent:0, failed:0, remaining:0 };
   }
-
+  console.log(".3")
   // assicura stato "sending"
   if (camp.status !== 'sending') {
     await pool.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [campaignId]);
