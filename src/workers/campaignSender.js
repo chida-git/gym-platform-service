@@ -103,6 +103,7 @@ const [recipients] = await pool.query(`
 });
 
   let sent = 0, failed = 0;
+  console.log("recipients", recipients)
 for (const r of recipients) {
   console.log("r", r)
   try {
