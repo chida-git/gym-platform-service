@@ -105,6 +105,39 @@ router.get('/marketing/contacts',
   })
 );
 
+router.post('/marketing/contacts/external',
+  [
+    body('gym_id').isInt().toInt(),
+    body('email').isEmail().trim().isLength({ max:180 }),
+    body('full_name').optional().isString().trim().isLength({ max:180 }),
+    body('phone').optional().isString().trim().isLength({ max:40 }),
+    body('tags').optional().isArray(),
+    body('subscribed').optional().isBoolean()
+  ],
+  asyncH(async (req, res) => {
+    const { gym_id, email, full_name=null, phone=null, tags=null, subscribed=true } = req.body;
+
+    // 👉 auto-link al users se esiste lo stesso email nella stessa palestra
+    const [[u]] = await db.query(`SELECT id FROM users WHERE gym_id=? AND email=?`, [gym_id, email]);
+    const user_id = u ? u.id : null;
+
+    await db.query(`
+      INSERT INTO marketing_contacts (gym_id, user_id, email, full_name, phone, tags, subscribed, consent_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, IF(?=1, NOW(), NULL), NOW())
+      ON DUPLICATE KEY UPDATE
+        -- se nel frattempo è comparso l'utente, colleghiamolo
+        user_id   = IF(VALUES(user_id) IS NOT NULL, VALUES(user_id), user_id),
+        full_name = VALUES(full_name),
+        phone     = VALUES(phone),
+        tags      = VALUES(tags),
+        subscribed= VALUES(subscribed),
+        consent_at= IF(VALUES(subscribed)=1, IFNULL(consent_at, NOW()), consent_at),
+        updated_at= NOW()
+    `, [gym_id, user_id, email, full_name, phone, tags ? JSON.stringify(tags) : null, subscribed ? 1 : 0, subscribed ? 1 : 0]);
+
+    res.status(201).json({ ok:true, linked_user: !!user_id });
+  })
+);
 
 // POST /marketing/campaigns/:id/recipients  { contact_ids:[...], replace:true|false }
 router.post('/marketing/campaigns/:id/recipients',
