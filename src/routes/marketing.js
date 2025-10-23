@@ -421,6 +421,20 @@ router.post('/marketing/campaigns/:id/ready',
   })
 );
 
+function toMySQLDateTime(iso) {
+  if (!iso) return null
+  const d = new Date(iso)                   // accetta sia ISO string che Date
+  if (isNaN(d)) return null
+  return new Date(d.getTime()).toISOString() // UTC
+    .slice(0, 19)
+    .replace('T', ' ')
+}
+
+function toMySQLLocal(dt){
+  const d = new Date(dt)
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0,19).replace('T',' ')
+}
 
 /**
  * CAMPAGNE
@@ -437,14 +451,20 @@ router.post('/marketing/campaigns',
     body('scheduled_at').optional({ nullable: true }).isISO8601()
   ],
   asyncH(async (req, res) => {
-    const { gym_id, name, subject, from_name, from_email, template_id = null, content_html = null, scheduled_at = null } = req.body;
+    const {
+      gym_id, name, subject, from_name, from_email,
+      template_id = null, content_html = null, scheduled_at = null
+    } = req.body
+
+    const scheduledAtSql = toMySQLLocal(scheduled_at) // 👈
+
     const [r] = await pool.query(
-      `INSERT INTO newsletter_campaigns 
+      `INSERT INTO newsletter_campaigns
        (gym_id, name, subject, from_name, from_email, template_id, content_html, status, scheduled_at, created_at)
        VALUES (?,?,?,?,?,?,?,'draft',?,NOW())`,
-      [gym_id, name, subject, from_name, from_email, template_id, content_html, scheduled_at]
-    );
-    res.status(201).json({ id: r.insertId });
+      [gym_id, name, subject, from_name, from_email, template_id, content_html, scheduledAtSql]
+    )
+    res.status(201).json({ id: r.insertId })
   })
 );
 
