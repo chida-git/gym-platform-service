@@ -9,8 +9,10 @@ const pool = mysql.createPool({
   connectionLimit: +(process.env.DB_POOL || 10)
 });
 
-pool.getConnection().then(conn => {
-  return conn.query("SET time_zone = 'Europe/Rome'").then(() => conn.release());
-});
+(async () => {
+  const conn = await pool.getConnection();
+  await conn.query("SET time_zone = 'Europe/Rome'");
+  conn.release();
+})();
 
 module.exports = { pool };
