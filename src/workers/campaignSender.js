@@ -57,15 +57,22 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
   if (!camp) return { sent:0, failed:0, remaining:0 };
   console.log(".1")
   // destinatari queued
-  const [recipients] = await pool.query(`
-    SELECT mc.id AS contact_id, u.email
-    FROM campaign_recipients cr
-    JOIN marketing_contacts mc ON mc.id = cr.contact_id
-    JOIN users u ON u.id = mc.user_id
-    WHERE cr.campaign_id = ? AND cr.send_status='queued'
-    ORDER BY cr.id ASC
-    LIMIT ?`, [campaignId, quotaAllowed]
-  );
+const [recipients] = await db.query(`
+  SELECT 
+    mc.id AS contact_id,
+    COALESCE(u.email, mc.email)       AS email,
+    COALESCE(u.full_name, mc.full_name) AS full_name
+  FROM campaign_recipients cr
+  JOIN marketing_contacts mc ON mc.id = cr.contact_id
+  LEFT JOIN users u          ON u.id = mc.user_id
+  WHERE cr.campaign_id = ?
+    AND cr.send_status = 'queued'
+    AND mc.subscribed = 1
+    AND COALESCE(u.email, mc.email) IS NOT NULL
+    AND COALESCE(u.email, mc.email) <> ''
+  ORDER BY cr.id ASC
+  LIMIT ?`, [campaignId, quotaAllowed]);
+
     console.log(".campaignId", campaignId)
       console.log(".quotaAllowed", quotaAllowed)
   console.log(".2")
@@ -96,22 +103,32 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
 });
 
   let sent = 0, failed = 0;
-  for (const r of recipients) {
-    try {
-      await sendMail({ to: r.email, subject, html, text: html.replace(/<[^>]+>/g, '') });
-      await pool.query(`
-        UPDATE campaign_recipients 
-        SET send_status='sent', send_at=NOW(), last_error=NULL
-        WHERE campaign_id=? AND contact_id=?`, [campaignId, r.contact_id]);
-      sent++;
-    } catch (e) {
-      await pool.query(`
-        UPDATE campaign_recipients 
-        SET send_status='failed', last_error=?
-        WHERE campaign_id=? AND contact_id=?`, [String(e.message).slice(0,490), campaignId, r.contact_id]);
-      failed++;
-    }
+for (const r of recipients) {
+  try {
+    await sendMail({
+      to: r.email,
+      subject,
+      html,
+      text,
+    });
+
+    await db.query(`
+      UPDATE campaign_recipients
+      SET send_status='sent', send_at=NOW(), last_error=NULL
+      WHERE campaign_id=? AND contact_id=?`,
+      [campaignId, r.contact_id]
+    );
+    sent++;
+  } catch (e) {
+    await db.query(`
+      UPDATE campaign_recipients
+      SET send_status='failed', last_error=?
+      WHERE campaign_id=? AND contact_id=?`,
+      [String(e.message).slice(0,490), campaignId, r.contact_id]
+    );
+    failed++;
   }
+}
 
   const [[remain]] = await pool.query(`
     SELECT COUNT(*) AS queued_remaining
