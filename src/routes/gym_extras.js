@@ -68,11 +68,6 @@ router.post("/:gymId/extras", async (req, res, next) => {
       [gymId]
     );
 
-    // pubblica eventi (best-effort, non bloccare la risposta)
-    Promise.allSettled(
-      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
-    ).catch(() => {});
-
     ok(res, rows, 201);
   } catch (e) {
     await conn.rollback();
@@ -83,25 +78,42 @@ router.post("/:gymId/extras", async (req, res, next) => {
 });
 
 // Sostituisce l’elenco (PUT)
-router.put("/:gymId/extras", async (req, res, next) => {
+router.put('/:gymId/extras', async (req, res, next) => {
   const gymId = Number(req.params.gymId);
   const { extraIds } = req.body || {};
-  if (!gymId) return bad(res, "gymId non valido");
-  if (!Array.isArray(extraIds)) return bad(res, "extraIds[] richiesto (può essere vuoto)");
+  if (!Number.isFinite(gymId) || gymId <= 0) return bad(res, 'gymId non valido');
+  if (!Array.isArray(extraIds)) return bad(res, 'extraIds[] richiesto (può essere vuoto)');
 
   const conn = await pool.getConnection();
+  const toPublish = [];
+
   try {
     await conn.beginTransaction();
-    await conn.query("DELETE FROM gym_extras WHERE gym_id = ?", [gymId]);
+
+    // reset
+    await conn.query('DELETE FROM gym_extras WHERE gym_id = ?', [gymId]);
+
+    // re-insert (con created_at)
     if (extraIds.length) {
-      const values = extraIds.map(id => [gymId, Number(id)]);
-      await conn.query(
-        "INSERT INTO gym_extras (gym_id, extra_id) VALUES ?",
-        [values]
-      );
+      const values = [];
+      const placeholders = [];
+      for (const raw of extraIds) {
+        const extraId = Number(raw);
+        if (!Number.isFinite(extraId) || extraId <= 0) continue;
+        placeholders.push('(?, ?, NOW())');
+        values.push(gymId, extraId);
+      }
+      if (placeholders.length) {
+        await conn.query(
+          `INSERT INTO gym_extras (gym_id, extra_id, created_at) VALUES ${placeholders.join(',')}`,
+          values
+        );
+      }
     }
+
     await conn.commit();
-  // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
+
+    // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
     for (const raw of extraIds) {
       const extraId = Number(raw);
       if (!Number.isFinite(extraId) || extraId <= 0) continue;
@@ -131,9 +143,9 @@ router.put("/:gymId/extras", async (req, res, next) => {
       toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
     ).catch(() => {});
 
-    ok(res, rows, 201);
+    ok(res, rows);
   } catch (e) {
-    await conn.rollback();
+    try { await conn.rollback(); } catch {}
     next(e);
   } finally {
     conn.release();
