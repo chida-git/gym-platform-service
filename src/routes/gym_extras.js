@@ -2,7 +2,7 @@
 const router = require('express').Router();
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
-
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 const ok = (res, data, status = 200) => res.status(status).json({ data });
 const bad = (res, msg = "Bad Request", status = 400) =>
@@ -48,6 +48,14 @@ router.post("/:gymId/extras", async (req, res, next) => {
        WHERE ge.gym_id = ? ORDER BY e.name`, [gymId]
     );
     ok(res, rows, 201);
+    for (const extraId of extraIds) {
+      const row = await pool.query(
+      `SELECT e.id, e.name, e.description
+       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
+       WHERE ge.gym_id = ? AND extra_id = ? ORDER BY e.name`, [gymId, Number(extraId)]
+    );
+    publishSafe('halls', `extra.add.*`, { id: row.id, gym_id: row.gym_id, extra_id: row.extra_id }).catch(()=>{})
+    }
   } catch (e) {
     await conn.rollback();
     next(e);
