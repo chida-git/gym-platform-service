@@ -43,23 +43,37 @@ router.post("/:gymId/extras", async (req, res, next) => {
       );
     }
     await conn.commit();
-    const [rows] = await pool.query(
-      `SELECT e.id, e.name, e.description
-       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
-       WHERE ge.gym_id = ? ORDER BY e.name`, [gymId]
-    );
-
-    for (const extraId of extraIds) {
-  
-      const row = await pool.query(
-      `SELECT e.id, e.name, e.description
-       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
-       WHERE ge.gym_id = ? AND extra_id = ? ORDER BY e.name`, [gymId, Number(extraId)]
-    );
-
-    publishSafe('halls', `extra.add.*`, { id: row.id, gym_id: row.gym_id, extra_id: row.extra_id }).catch(()=>{})
+  // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
+    for (const raw of extraIds) {
+      const extraId = Number(raw);
+      if (!Number.isFinite(extraId) || extraId <= 0) continue;
+      const [rowsId] = await pool.query(
+        'SELECT id FROM gym_extras WHERE gym_id = ? AND extra_id = ? LIMIT 1',
+        [gymId, extraId]
+      );
+      const id = rowsId?.[0]?.id || null;
+      toPublish.push({ id, gym_id: gymId, extra_id: extraId });
     }
-        ok(res, rows, 201);
+
+    // risposta: elenco extras aggiornato (includo anche extra_id se ti serve)
+    const [rows] = await pool.query(
+      `SELECT ge.id      AS gym_extra_id,
+              ge.extra_id,
+              e.name,
+              e.description
+         FROM gym_extras ge
+         JOIN extras e ON e.id = ge.extra_id
+        WHERE ge.gym_id = ?
+        ORDER BY e.name`,
+      [gymId]
+    );
+
+    // pubblica eventi (best-effort, non bloccare la risposta)
+    Promise.allSettled(
+      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+    ).catch(() => {});
+
+    ok(res, rows, 201);
   } catch (e) {
     await conn.rollback();
     next(e);
@@ -87,23 +101,37 @@ router.put("/:gymId/extras", async (req, res, next) => {
       );
     }
     await conn.commit();
-    const [rows] = await pool.query(
-      `SELECT e.id, e.name, e.description
-       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
-       WHERE ge.gym_id = ? ORDER BY e.name`, [gymId]
-    );
-
-   for (const extraId of extraIds) {
-      const row = await pool.query(
-      `SELECT e.id, e.name, e.description
-       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
-       WHERE ge.gym_id = ? AND extra_id = ? ORDER BY e.name`, [gymId, Number(extraId)]
-    );
-
-    publishSafe('halls', `extra.add.*`, { id: row.id, gym_id: row.gym_id, extra_id: row.extra_id }).catch(()=>{})
+  // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
+    for (const raw of extraIds) {
+      const extraId = Number(raw);
+      if (!Number.isFinite(extraId) || extraId <= 0) continue;
+      const [rowsId] = await pool.query(
+        'SELECT id FROM gym_extras WHERE gym_id = ? AND extra_id = ? LIMIT 1',
+        [gymId, extraId]
+      );
+      const id = rowsId?.[0]?.id || null;
+      toPublish.push({ id, gym_id: gymId, extra_id: extraId });
     }
 
-    ok(res, rows);
+    // risposta: elenco extras aggiornato (includo anche extra_id se ti serve)
+    const [rows] = await pool.query(
+      `SELECT ge.id      AS gym_extra_id,
+              ge.extra_id,
+              e.name,
+              e.description
+         FROM gym_extras ge
+         JOIN extras e ON e.id = ge.extra_id
+        WHERE ge.gym_id = ?
+        ORDER BY e.name`,
+      [gymId]
+    );
+
+    // pubblica eventi (best-effort, non bloccare la risposta)
+    Promise.allSettled(
+      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+    ).catch(() => {});
+
+    ok(res, rows, 201);
   } catch (e) {
     await conn.rollback();
     next(e);
