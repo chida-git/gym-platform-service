@@ -55,7 +55,7 @@ async function sendBatchForCampaign(campaignId, quotaAllowed) {
     LEFT JOIN newsletter_templates t ON t.id = c.template_id
     WHERE c.id=?`, [campaignId]);
   if (!camp) return { sent:0, failed:0, remaining:0 };
-  console.log(".1")
+
   // destinatari queued
 const [recipients] = await pool.query(`
   SELECT 
@@ -73,9 +73,6 @@ const [recipients] = await pool.query(`
   ORDER BY cr.id ASC
   LIMIT ?`, [campaignId, quotaAllowed]);
 
-    console.log(".campaignId", campaignId)
-      console.log(".quotaAllowed", quotaAllowed)
-  console.log(".2")
   if (!recipients.length) {
     // nulla da inviare: se non ci sono più queued → chiudi campagna
     const [[remain]] = await pool.query(`
@@ -86,7 +83,7 @@ const [recipients] = await pool.query(`
     }
     return { sent:0, failed:0, remaining:0 };
   }
-  console.log(".3")
+
   // assicura stato "sending"
   if (camp.status !== 'sending') {
     await pool.query(`UPDATE newsletter_campaigns SET status='sending', updated_at=NOW() WHERE id=?`, [campaignId]);
@@ -164,12 +161,12 @@ if (queuedRemaining === 0) {
 /** Loop principale */
 async function tick() {
   try {
-    console.log("start")
+
     // quota oraria residua
     const used = await sentInLastHour();
     const remainingWindow = Math.max(0, PER_HOUR - used);
     if (remainingWindow <= 0) return; // rate-limited: aspetto prossimo tick
-    console.log(remainingWindow)
+
     // prendo una campagna da lavorare
     const cid = await pickCampaign();
     if (!cid) return;

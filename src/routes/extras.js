@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 // helper per risposte
 const ok = (res, data, status = 200) => res.status(status).json({ data });
@@ -28,6 +29,7 @@ router.post("/", async (req, res, next) => {
       [name.trim(), description]
     );
     const [rows] = await pool.query("SELECT * FROM extras WHERE id = ?", [r.insertId]);
+    publishSafe('halls', `extra.global.*`, { event: 'personal.upsert', gym_id: id, opening_hours: updated.opening_hours, name: updated.name, email: updated.email, phone: updated.phone, description: updated.description, web: updated.web, ts }).catch(()=>{})
     ok(res, rows[0], 201);
   } catch (e) {
     if (e.code === "ER_DUP_ENTRY") return bad(res, "name già esistente", 409);
