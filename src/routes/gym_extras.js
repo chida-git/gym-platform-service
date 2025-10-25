@@ -27,7 +27,7 @@ router.get("/:gymId/extras", async (req, res, next) => {
 
 // Aggancia uno o più extra (idempotente)
 router.post("/:gymId/extras", async (req, res, next) => {
-  console.log("ok")
+
   const gymId = Number(req.params.gymId);
   const { extraIds } = req.body || {};
   if (!gymId) return bad(res, "gymId non valido");
@@ -48,9 +48,9 @@ router.post("/:gymId/extras", async (req, res, next) => {
        FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
        WHERE ge.gym_id = ? ORDER BY e.name`, [gymId]
     );
-    console.log(".1")
+
     for (const extraId of extraIds) {
-      console.log("extraId", extraId)
+  
       const row = await pool.query(
       `SELECT e.id, e.name, e.description
        FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
@@ -92,6 +92,17 @@ router.put("/:gymId/extras", async (req, res, next) => {
        FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
        WHERE ge.gym_id = ? ORDER BY e.name`, [gymId]
     );
+
+   for (const extraId of extraIds) {
+      const row = await pool.query(
+      `SELECT e.id, e.name, e.description
+       FROM gym_extras ge JOIN extras e ON e.id = ge.extra_id
+       WHERE ge.gym_id = ? AND extra_id = ? ORDER BY e.name`, [gymId, Number(extraId)]
+    );
+
+    publishSafe('halls', `extra.add.*`, { id: row.id, gym_id: row.gym_id, extra_id: row.extra_id }).catch(()=>{})
+    }
+
     ok(res, rows);
   } catch (e) {
     await conn.rollback();
