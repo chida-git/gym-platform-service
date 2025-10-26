@@ -140,7 +140,8 @@ router.put('/:gymId/extras', async (req, res, next) => {
 
     // pubblica eventi (best-effort, non bloccare la risposta)
     Promise.allSettled(
-      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+      //publishSafe('halls', 'extra.add.v1', m)
+      toPublish.map(m => console.log("m", m))
     ).catch(() => {});
 
     ok(res, rows);
