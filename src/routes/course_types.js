@@ -44,7 +44,7 @@ router.post('/:gymId/course-types', async (req, res, next) => {
     );
 
     const [row] = await pool.query(`SELECT * FROM course_types WHERE gym_id=? AND slug=?`, [gymId, slug]);
-    toPublish.push({ id: row[0].id, gym_id: gymId, name: body.name, slug, durationMin: body.durationMin, description: body.description, level: body.level, status: body.status });
+    toPublish.push({ id: row[0].id, gym_id: Number(gymId), name: body.name, slug, durationMin: body.durationMin, description: body.description, level: body.level, status: body.status });
 
    Promise.allSettled(
       publishSafe('course_types', 'course_type.upsert.v1', toPublish)
