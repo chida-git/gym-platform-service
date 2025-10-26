@@ -4,6 +4,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth'); // se già usi questo
 const { pick, toSlug } = require('../util');
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 // router.use(requireAuth);
 
@@ -32,9 +33,10 @@ router.post('/:gymId/course-types', async (req, res, next) => {
   try {
     const { gymId } = req.params;
     const body = pick(req.body, ['name','durationMin','description','level','status']);
+    let slug = '';
     if (!body.name || !body.durationMin) return res.status(400).json({ message: 'name and durationMin are required' });
-
-    const slug = toSlug(body.name);
+    const toPublish = [];
+    slug = toSlug(body.name);
     await pool.query(
       `INSERT INTO course_types (gym_id, name, slug, duration_min, description, level, status)
        VALUES (?,?,?,?,?,?,COALESCE(?, 'active'))`,
@@ -42,6 +44,12 @@ router.post('/:gymId/course-types', async (req, res, next) => {
     );
 
     const [row] = await pool.query(`SELECT * FROM course_types WHERE gym_id=? AND slug=?`, [gymId, slug]);
+    toPublish.push({ id: row[0].id, gym_id: gymId, name: body.name, slug, durationMin: body.durationMin, description: body.description, level: body.level, status: body.status });
+
+   Promise.allSettled(
+      publishSafe('course_types', 'course_type.upsert.v1', toPublish)
+    ).catch(() => {});
+
     res.status(201).json(row[0]);
   } catch (err) {
     if (err && err.code === 'ER_DUP_ENTRY') return res.status(409).json({ message: 'Course slug already exists' });
@@ -58,6 +66,7 @@ router.patch('/course-types/:id', async (req, res, next) => {
     const body = pick(req.body, ['name','durationMin','description','level','status']);
     const fields = [];
     const values = [];
+    const toPublish = [];
 
     if (body.name) { fields.push('name=?'); values.push(body.name); fields.push('slug=?'); values.push(toSlug(body.name)); }
     if (body.durationMin != null) { fields.push('duration_min=?'); values.push(body.durationMin); }
@@ -69,6 +78,16 @@ router.patch('/course-types/:id', async (req, res, next) => {
 
     values.push(id);
     await pool.query(`UPDATE course_types SET ${fields.join(', ')} WHERE id=?`, values);
+
+    const [selectedRow] = await pool.query(
+      `SELECT id, gym_id, name, slug, duration_min AS durationMin, description, level, status
+       FROM course_types WHERE id=?`, [id]);
+
+    toPublish.push({ id: id, gym_id: selectedRow[0].gym_id, name: selectedRow[0].name, slug: selectedRow[0].slug, durationMin: selectedRow[0].durationMin, description: selectedRow[0].description, level: selectedRow[0].level, status: selectedRow[0].status });
+
+       Promise.allSettled(
+      publishSafe('course_types', 'course_type.upsert.v1', toPublish)
+    ).catch(() => {});
 
     const [rows] = await pool.query(
       `SELECT id, gym_id AS gymId, name, slug, duration_min AS durationMin, description, level, status
