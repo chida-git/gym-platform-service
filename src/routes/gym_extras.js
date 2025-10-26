@@ -160,7 +160,7 @@ router.delete("/:gymId/extras/:extraId", async (req, res, next) => {
     toPublish.push({ gym_id: gymId, extra_id: extraId });
 
      Promise.allSettled(
-      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+      toPublish.map(m => publishSafe('halls', 'extra.remove.v1', m))
     ).catch(() => {});
 
     ok(res, { gymId, extraId });
