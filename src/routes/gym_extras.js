@@ -27,12 +27,11 @@ router.get("/:gymId/extras", async (req, res, next) => {
 
 // Aggancia uno o più extra (idempotente)
 router.post("/:gymId/extras", async (req, res, next) => {
-
   const gymId = Number(req.params.gymId);
   const { extraIds } = req.body || {};
   if (!gymId) return bad(res, "gymId non valido");
   if (!Array.isArray(extraIds) || extraIds.length === 0) return bad(res, "extraIds[] richiesto");
-
+  const toPublish = [];
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -47,12 +46,7 @@ router.post("/:gymId/extras", async (req, res, next) => {
     for (const raw of extraIds) {
       const extraId = Number(raw);
       if (!Number.isFinite(extraId) || extraId <= 0) continue;
-      const [rowsId] = await pool.query(
-        'SELECT id FROM gym_extras WHERE gym_id = ? AND extra_id = ? LIMIT 1',
-        [gymId, extraId]
-      );
-      const id = rowsId?.[0]?.id || null;
-      toPublish.push({ id, gym_id: gymId, extra_id: extraId });
+      toPublish.push({ gym_id: gymId, extra_id: extraId });
     }
 
     // risposta: elenco extras aggiornato (includo anche extra_id se ti serve)
@@ -67,6 +61,10 @@ router.post("/:gymId/extras", async (req, res, next) => {
         ORDER BY e.name`,
       [gymId]
     );
+
+     Promise.allSettled(
+      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+    ).catch(() => {});
 
     ok(res, rows, 201);
   } catch (e) {
@@ -112,7 +110,7 @@ router.put('/:gymId/extras', async (req, res, next) => {
     }
 
     await conn.commit();
-    console.log("extraIds", extraIds)
+
     // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
     for (const raw of extraIds) {
       const extraId = Number(raw);
@@ -151,6 +149,7 @@ router.put('/:gymId/extras', async (req, res, next) => {
 router.delete("/:gymId/extras/:extraId", async (req, res, next) => {
   const gymId = Number(req.params.gymId);
   const extraId = Number(req.params.extraId);
+  const toPublish = [];
   if (!gymId || !extraId) return bad(res, "parametri non validi");
   try {
     const [r] = await pool.query(
@@ -158,6 +157,12 @@ router.delete("/:gymId/extras/:extraId", async (req, res, next) => {
       [gymId, extraId]
     );
     if (r.affectedRows === 0) return bad(res, "associazione non trovata", 404);
+    toPublish.push({ gym_id: gymId, extra_id: extraId });
+
+     Promise.allSettled(
+      toPublish.map(m => publishSafe('halls', 'extra.add.v1', m))
+    ).catch(() => {});
+
     ok(res, { gymId, extraId });
   } catch (e) { next(e); }
 });
