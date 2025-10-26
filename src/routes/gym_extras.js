@@ -112,7 +112,7 @@ router.put('/:gymId/extras', async (req, res, next) => {
     }
 
     await conn.commit();
-
+    console.log("extraIds", extraIds)
     // prepara gli eventi DOPO la commit: recupera l'id di mapping per ogni extra_id
     for (const raw of extraIds) {
       const extraId = Number(raw);
