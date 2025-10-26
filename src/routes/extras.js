@@ -29,7 +29,7 @@ router.post("/", async (req, res, next) => {
       [name.trim(), description]
     );
     const [rows] = await pool.query("SELECT * FROM extras WHERE id = ?", [r.insertId]);
-    publishSafe('halls', `extra.global.*`, { name: name.trim(), description: description }).catch(()=>{})
+    publishSafe('halls', `extra.global.*`, { id: rows[0].id, name: name.trim(), description: description }).catch(()=>{})
     ok(res, rows[0], 201);
   } catch (e) {
     if (e.code === "ER_DUP_ENTRY") return bad(res, "name già esistente", 409);
