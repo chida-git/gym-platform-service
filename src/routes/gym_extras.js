@@ -117,12 +117,7 @@ router.put('/:gymId/extras', async (req, res, next) => {
     for (const raw of extraIds) {
       const extraId = Number(raw);
       if (!Number.isFinite(extraId) || extraId <= 0) continue;
-      const [rowsId] = await pool.query(
-        'SELECT id FROM gym_extras WHERE gym_id = ? AND extra_id = ? LIMIT 1',
-        [gymId, extraId]
-      );
-      const id = rowsId?.[0]?.id || null;
-      toPublish.push({ id, gym_id: gymId, extra_id: extraId });
+      toPublish.push({ gym_id: gymId, extra_id: extraId });
     }
 
     // risposta: elenco extras aggiornato (includo anche extra_id se ti serve)
