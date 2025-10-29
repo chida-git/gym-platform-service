@@ -4,6 +4,7 @@ const router = express.Router();
 const { pool } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { pick } = require('../util');
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 //router.use(requireAuth);
 
@@ -35,6 +36,7 @@ router.post('/:gymId/weekly-slots', async (req, res, next) => {
   try {
     const { gymId } = req.params;
     const b = pick(req.body, ['courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
+    const toPublish = [];
     if (b.courseTypeId == null || b.weekday == null || !b.startTime || !b.durationMin)
       return res.status(400).json({ message: 'courseTypeId, weekday, startTime, durationMin are required' });
     await pool.query(
@@ -42,6 +44,12 @@ router.post('/:gymId/weekly-slots', async (req, res, next) => {
        VALUES (?,?,?,?,?,?,COALESCE(?,1),?)`,
        [gymId, b.courseTypeId, b.weekday, b.startTime, b.durationMin, b.capacity || null, b.isActive, b.notes || null]
     );
+    toPublish.push({ gym_id: gymId, course_type_id: b.courseTypeId, weekday: b.weekday, start_time: b.startTime, duration_min: b.durationMin, capacity: b.capacity, is_active: b.isActive, notes: b.notes });
+
+       Promise.allSettled(
+      publishSafe('course_types', 'weekly_slots.upsert.v1', toPublish)
+    ).catch(() => {});
+
     res.status(201).json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -54,6 +62,7 @@ router.patch('/weekly-slots/:id', async (req, res, next) => {
     const { id } = req.params;
     const b = pick(req.body, ['courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
     const fields = [], values = [];
+    const toPublish = [];
     if (b.courseTypeId != null) { fields.push('course_type_id=?'); values.push(b.courseTypeId); }
     if (b.weekday != null) { fields.push('weekday=?'); values.push(b.weekday); }
     if (b.startTime) { fields.push('start_time=?'); values.push(b.startTime); }
@@ -65,6 +74,12 @@ router.patch('/weekly-slots/:id', async (req, res, next) => {
 
     values.push(id);
     await pool.query(`UPDATE weekly_slots SET ${fields.join(', ')} WHERE id=?`, values);
+    toPublish.push({ gym_id: b.gymId, course_type_id: b.courseTypeId, weekday: b.weekday, start_time: b.startTime, duration_min: b.durationMin, capacity: b.capacity, is_active: b.isActive, notes: b.notes });
+
+           Promise.allSettled(
+      publishSafe('course_types', 'weekly_slots.upsert.v1', toPublish)
+    ).catch(() => {});
+    
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
