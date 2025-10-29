@@ -60,29 +60,68 @@ router.post('/:gymId/weekly-slots', async (req, res, next) => {
 router.patch('/weekly-slots/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const b = pick(req.body, ['gymId', 'courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
-    const fields = [], values = [];
-    const toPublish = [];
-    if (b.courseTypeId != null) { fields.push('course_type_id=?'); values.push(b.courseTypeId); }
-    if (b.weekday != null) { fields.push('weekday=?'); values.push(b.weekday); }
-    if (b.startTime) { fields.push('start_time=?'); values.push(b.startTime); }
-    if (b.durationMin != null) { fields.push('duration_min=?'); values.push(b.durationMin); }
-    if ('capacity' in b) { fields.push('capacity=?'); values.push(b.capacity); }
-    if ('isActive' in b) { fields.push('is_active=?'); values.push(b.isActive ? 1 : 0); }
-    if ('notes' in b) { fields.push('notes=?'); values.push(b.notes); }
+    const b = pick(req.body, [
+      'gymId', 'courseTypeId', 'weekday', 'startTime', 'durationMin',
+      'capacity', 'isActive', 'notes'
+    ]);
+
+    const fields = [];
+    const values = [];
+
+    if (b.courseTypeId != null) { fields.push('course_type_id = ?'); values.push(b.courseTypeId); }
+    if (b.weekday != null)       { fields.push('weekday = ?');       values.push(b.weekday); }
+    if (b.startTime != null)     { fields.push('start_time = ?');    values.push(b.startTime); }
+    if (b.durationMin != null)   { fields.push('duration_min = ?');  values.push(b.durationMin); }
+    if ('capacity' in b)         { fields.push('capacity = ?');      values.push(b.capacity); }
+    if ('isActive' in b)         { fields.push('is_active = ?');     values.push(b.isActive ? 1 : 0); }
+    if ('notes' in b)            { fields.push('notes = ?');         values.push(b.notes); }
+
     if (!fields.length) return res.status(400).json({ message: 'No fields to update' });
 
+    // facoltativo: aggiornare anche updated_at
+    // fields.push('updated_at = NOW()');
+
     values.push(id);
-    await pool.query(`UPDATE weekly_slots SET ${fields.join(', ')} WHERE id=?`, values);
-    toPublish.push({ gym_id: b.gymId, course_type_id: b.courseTypeId, weekday: b.weekday, start_time: b.startTime, duration_min: b.durationMin, capacity: b.capacity, is_active: b.isActive, notes: b.notes });
+    await pool.query(`UPDATE weekly_slots SET ${fields.join(', ')} WHERE id = ?`, values);
 
-           Promise.allSettled(
-      publishSafe('course_types', 'weekly_slots.upsert.v1', toPublish)
-    ).catch(() => {});
+    // SELECT completa della riga aggiornata
+    const [rows] = await pool.query(
+      `SELECT id, gym_id, course_type_id, weekday, start_time, duration_min,
+              capacity, is_active, notes, created_at, updated_at
+       FROM weekly_slots
+       WHERE id = ?`,
+      [id]
+    );
 
-    res.json({ ok: true });
-  } catch (err) { next(err); }
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Weekly slot not found after update' });
+    }
+
+    // Prepara payload da pubblicare (snake_case come in DB)
+    const toPublish = rows.map(r => ({
+      id: r.id,
+      gym_id: r.gym_id,
+      course_type_id: r.course_type_id,
+      weekday: r.weekday,
+      start_time: r.start_time,
+      duration_min: r.duration_min,
+      capacity: r.capacity,
+      is_active: !!r.is_active,
+      notes: r.notes,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+
+    // Pubblica
+    // NB: usa il topic giusto; se il tuo topic è "weekly_slots", sostituiscilo qui sotto.
+    await publishSafe('course_types', 'weekly_slots.upsert.v1', toPublish);
+
+    res.json({ ok: true, updated: toPublish[0] });
+  } catch (err) {
+    next(err);
+  }
 });
+
 
 /**
  * POST /weekly-slots/:id/overrides
