@@ -89,8 +89,8 @@ router.patch('/weekly-slots/:id', async (req, res, next) => {
       `SELECT id, gym_id, course_type_id, weekday, start_time, duration_min,
               capacity, is_active, notes, created_at, updated_at
        FROM weekly_slots
-       WHERE id = ?`,
-      [id]
+       WHERE id_gym = ?`,
+      [b.gymId]
     );
 
     if (!rows.length) {
