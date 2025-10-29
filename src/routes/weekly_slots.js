@@ -60,7 +60,7 @@ router.post('/:gymId/weekly-slots', async (req, res, next) => {
 router.patch('/weekly-slots/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const b = pick(req.body, ['courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
+    const b = pick(req.body, ['gymId', 'courseTypeId','weekday','startTime','durationMin','capacity','isActive','notes']);
     const fields = [], values = [];
     const toPublish = [];
     if (b.courseTypeId != null) { fields.push('course_type_id=?'); values.push(b.courseTypeId); }
@@ -79,7 +79,7 @@ router.patch('/weekly-slots/:id', async (req, res, next) => {
            Promise.allSettled(
       publishSafe('course_types', 'weekly_slots.upsert.v1', toPublish)
     ).catch(() => {});
-    
+
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
