@@ -77,7 +77,7 @@ const [[created]] = await pool.query(
     publishSafe('equipment', 'categories.create.*', payload)
       .catch(err => console.error('[publish category create]', err.message));
 
-    res.status(201).json({ data: created[0] });
+    res.status(201).json({ data: created });
   })
 );
 
@@ -128,7 +128,7 @@ router.delete('/categories/:id',
     // Publish RabbitMQ (fire-and-forget)
     publishSafe('equipment', 'categories.delete.*', payload)
       .catch(err => console.error('[publish category delete]', err.message));
-      
+
     res.status(204).send();
   })
 );
