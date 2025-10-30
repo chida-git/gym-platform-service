@@ -67,6 +67,15 @@ const TOPOLOGIES = [
     dlqQueue: process.env.HALLS_DLQ      || 'fe-halls-consumer.dlq',
     bindings: ['hall.create.*','hall.update.*','extra.add.*','extra.update.*','extra.remove.*'],
   },
+  {
+    key: 'equipment',
+    exchange: process.env.HALLS_EXCHANGE || 'gym.equipment',
+    dlx:      process.env.HALLS_DLX      || 'gym.equipment.dlx',
+    queue:    process.env.HALLS_QUEUE    || 'fe-equipment-consumer',
+    dlqRk:    process.env.HALLS_DLQ_RK   || 'dlq',
+    dlqQueue: process.env.HALLS_DLQ      || 'fe-equipment-consumer.dlq',
+    bindings: ['equipment.create.*','equipment.update.*', 'categories.create.*', 'categories.update.*', 'categories.delete.*'],
+  },
 ];
 
 // mappa rapida per pubblicazione: key -> exchange

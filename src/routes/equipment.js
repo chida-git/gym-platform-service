@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
 const { body, query, param, validationResult } = require('express-validator');
+const { publishSafe } = require('../mq')  // <-- usa publishSafe
 
 /** helper */
 const asyncH = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -59,7 +60,23 @@ router.post('/categories',
        VALUES (?, ?, NOW(), NOW())`,
       [name, parent_id]
     );
-    const created = await pool.query(`SELECT * FROM equipment_categories WHERE id=?`, [r.insertId]);
+
+const [[created]] = await pool.query(
+      `SELECT * FROM equipment_categories WHERE id=?`,
+      [r.insertId]
+    );
+
+    // Preparo payload
+    const payload = {
+      action: 'create',
+      entity: 'equipment_category',
+      data: created
+    };
+
+    // Publish su exchange "equipment"
+    publishSafe('equipment', 'categories.create.*', payload)
+      .catch(err => console.error('[publish category create]', err.message));
+
     res.status(201).json({ data: created[0] });
   })
 );
@@ -76,8 +93,22 @@ router.patch('/categories/:id',
     if (!sets.length) return bad(res, [{ msg: 'Nothing to update' }]);
     pr.push(id);
     await pool.query(`UPDATE equipment_categories SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
-    const row = await pool.query(`SELECT * FROM equipment_categories WHERE id=?`, [id]);
-    ok(res, row[0]);
+    const [[updated]] = await pool.query(
+      `SELECT * FROM equipment_categories WHERE id=?`,
+      [id]
+    );
+
+    // Publish RabbitMQ
+    const payload = {
+      action: 'update',
+      entity: 'equipment_category',
+      data: updated
+    };
+
+    // fire-and-forget (se preferisci bloccare in caso di errore, usa await)
+    publishSafe('equipment', 'categories.update.*', payload)
+      .catch(err => console.error('[publish category update]', err.message));
+    ok(res, updated);
   })
 );
 
@@ -87,6 +118,17 @@ router.delete('/categories/:id',
   asyncH(async (req, res) => {
     const { id } = req.params;
     await pool.query(`DELETE FROM equipment_categories WHERE id=?`, [id]);
+
+    const payload = {
+      action: 'delete',
+      entity: 'equipment_category',
+      data: toDelete
+    };
+
+    // Publish RabbitMQ (fire-and-forget)
+    publishSafe('equipment', 'categories.delete.*', payload)
+      .catch(err => console.error('[publish category delete]', err.message));
+      
     res.status(204).send();
   })
 );
@@ -167,6 +209,30 @@ router.post('/models',
 
       await conn.commit();
       const created = await pool.query(`SELECT * FROM equipment_models WHERE id=?`, [modelId]);
+
+
+      const [[model]] = await pool.query(`
+        SELECT em.*, ec.name AS category_name, ec.parent_id AS category_parent_id
+        FROM equipment_models em
+        LEFT JOIN equipment_categories ec ON ec.id = em.category_id
+        WHERE em.id = ?`, [modelId]);
+
+      const [specRows] = await pool.query(`
+        SELECT spec_key, spec_value
+        FROM equipment_model_specs
+        WHERE model_id = ?`, [modelId]);
+
+      const payload = {
+        action: 'create',
+        entity: 'equipment_model',
+        data: {
+          ...model,
+          specs: specRows
+        }
+      };
+
+     await publishSafe('equipment', 'equipment.create.model', payload).catch(err => console.error('[publish equipment]', err.message));
+
       res.status(201).json({ data: created[0] });
     } catch (e) {
       await conn.rollback();
@@ -194,6 +260,28 @@ router.patch('/models/:id',
     pr.push(id);
     await pool.query(`UPDATE equipment_models SET ${sets.join(', ')}, updated_at=NOW() WHERE id=?`, pr);
     const row = await pool.query(`SELECT * FROM equipment_models WHERE id=?`, [id]);
+
+        const [[model]] = await pool.query(`
+      SELECT em.*, ec.name AS category_name, ec.parent_id AS category_parent_id
+      FROM equipment_models em
+      LEFT JOIN equipment_categories ec ON ec.id = em.category_id
+      WHERE em.id = ?`, [id]);
+
+    const [specRows] = await pool.query(`
+      SELECT spec_key, spec_value
+      FROM equipment_model_specs
+      WHERE model_id = ?`, [id]);
+
+    const payload = {
+      action: 'update',
+      entity: 'equipment_model',
+      data: { ...model, specs: specRows }
+    };
+
+    // Publish su RabbitMQ
+    publishSafe('equipment', 'equipment.update.model', payload)
+      .catch(err => console.error('[publish equipment update]', err.message));
+
     ok(res, row[0]);
   })
 );
@@ -241,6 +329,28 @@ router.put('/models/:id/specs',
       }
       await conn.commit();
       const out = await pool.query(`SELECT * FROM equipment_model_specs WHERE model_id=?`, [id]);
+
+            const [[model]] = await pool.query(`
+        SELECT em.*, ec.name AS category_name, ec.parent_id AS category_parent_id
+        FROM equipment_models em
+        LEFT JOIN equipment_categories ec ON ec.id = em.category_id
+        WHERE em.id = ?`, [id]);
+
+      const [specRows] = await pool.query(`
+        SELECT spec_key, spec_value
+        FROM equipment_model_specs
+        WHERE model_id = ?`, [id]);
+
+      const payload = {
+        action: 'update',
+        entity: 'equipment_model_specs',
+        data: { ...model, specs: specRows }
+      };
+
+      // Publish (fire-and-forget, log error ma non blocca la risposta)
+      publishSafe('equipment', 'equipment.update.specs', payload)
+        .catch(err => console.error('[publish specs update]', err.message));
+
       ok(res, out);
     } catch (e) {
       await conn.rollback(); throw e;
