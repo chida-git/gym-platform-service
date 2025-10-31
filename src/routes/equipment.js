@@ -328,7 +328,7 @@ router.put('/models/:id/specs',
       await conn.beginTransaction();
       await conn.query(`DELETE FROM equipment_model_specs WHERE model_id=?`, [id]);
       if (specs.length) {
-        const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value]);
+        const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value, gym_id]);
         await conn.query(
           `INSERT INTO equipment_model_specs (model_id, spec_key, spec_value, created_at, updated_at, gym_id)
            VALUES ${rows.map(() => '(?,?,?,NOW(),NOW(),?)').join(',')}`,
