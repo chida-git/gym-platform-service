@@ -30,11 +30,12 @@ router.get('/categories',
     query('offset').optional().isInt({ min: 0 }),
   ],
   asyncH(async (req, res) => {
-    const { search, parent_id, limit = 100, offset = 0 } = req.query;
+    const { search, parent_id, limit = 100, offset = 0, gym_id } = req.query;
     const wh = [];
     const pr = [];
     if (search) { wh.push('name LIKE ?'); pr.push(`%${search}%`); }
     if (parent_id) { wh.push('parent_id = ?'); pr.push(parent_id); }
+    if (gym_id) { wh.push('gym_id = ?'); pr.push(gym_id); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
     const [rows] = await pool.query(
       `SELECT id, name, parent_id, created_at, updated_at
