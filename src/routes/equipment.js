@@ -71,7 +71,8 @@ const [[created]] = await pool.query(
     const payload = {
       action: 'create',
       entity: 'equipment_category',
-      data: created
+      data: created,
+      gym_id: gym_id
     };
 
     // Publish su exchange "equipment"
