@@ -322,14 +322,14 @@ router.put('/models/:id/specs',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    console.log("req.body", req.body)
     const specs = Array.isArray(req.body.specs) ? req.body.specs : [];
+    const gym_id = req.body.gym_id
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await conn.query(`DELETE FROM equipment_model_specs WHERE model_id=?`, [id]);
       if (specs.length) {
-        const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value, s.gym_id]);
+        const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value, gym_id]);
         console.log("row", rows)
         await conn.query(
           `INSERT INTO equipment_model_specs (model_id, spec_key, spec_value, created_at, updated_at, gym_id)
