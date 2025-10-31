@@ -256,7 +256,7 @@ router.patch('/models/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    const allowed = ['category_id','brand','model_name','sku','description','photo_url','is_track_per_item'];
+    const allowed = ['category_id','brand','model_name','sku','description','photo_url','is_track_per_item', 'gym_id'];
     const sets = []; const pr = [];
     for (const k of allowed) {
       if (req.body[k] !== undefined) {
