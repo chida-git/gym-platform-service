@@ -194,7 +194,7 @@ router.post('/models',
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
-      const r = await conn.query(
+      const [r] = await conn.query(
         `INSERT INTO equipment_models
          (category_id, brand, model_name, sku, description, photo_url, is_track_per_item, created_at, updated_at, gym_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)`,
