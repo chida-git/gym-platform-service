@@ -150,11 +150,12 @@ router.get('/models',
     query('offset').optional().isInt({ min: 0 }),
   ],
   asyncH(async (req, res) => {
-    const { category_id, is_track_per_item, search, limit = 50, offset = 0 } = req.query;
+    const { category_id, is_track_per_item, search, limit = 50, offset = 0, gym_id } = req.query;
     const wh = []; const pr = [];
     if (category_id) { wh.push('m.category_id = ?'); pr.push(category_id); }
     if (is_track_per_item !== undefined) { wh.push('m.is_track_per_item = ?'); pr.push(is_track_per_item ? 1 : 0); }
     if (search) { wh.push('(m.model_name LIKE ? OR m.brand LIKE ? OR m.sku LIKE ?)'); pr.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    if (gym_id) { wh.push('m.gym_id = ?'); pr.push(gym_id); }
     const where = wh.length ? `WHERE ${wh.join(' AND ')}` : '';
     const [rows] = await pool.query(
   `SELECT
@@ -185,7 +186,7 @@ router.post('/models',
     const v = validationResult(req); if (!v.isEmpty()) return bad(res, v.array());
     const {
       category_id, brand = null, model_name, sku = null, description = null, photo_url = null,
-      is_track_per_item = true, specs = []
+      is_track_per_item = true, specs = [], gym_id
     } = req.body;
 
     // transazione (assume db.query gestisce connessione/pool; altrimenti usa getConnection)
@@ -194,9 +195,9 @@ router.post('/models',
       await conn.beginTransaction();
       const r = await conn.query(
         `INSERT INTO equipment_models
-         (category_id, brand, model_name, sku, description, photo_url, is_track_per_item, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-        [category_id, brand, model_name, sku, description, photo_url, is_track_per_item ? 1 : 0]
+         (category_id, brand, model_name, sku, description, photo_url, is_track_per_item, created_at, updated_at, gym_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)`,
+        [category_id, brand, model_name, sku, description, photo_url, is_track_per_item ? 1 : 0, gym_id]
       );
       const modelId = r.insertId;
 
