@@ -64,7 +64,7 @@ router.post('/categories',
 
 const [[created]] = await pool.query(
       `SELECT * FROM equipment_categories WHERE id=?`,
-      [r.insertId]
+      [r.id]
     );
 
     // Preparo payload
