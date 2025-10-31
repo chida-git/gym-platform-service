@@ -322,7 +322,8 @@ router.put('/models/:id/specs',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    const specs = Array.isArray(req.body) ? req.body : [];
+    console.log("req.body", req.body)
+    const specs = Array.isArray(req.body.specs) ? req.body.specs : [];
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
