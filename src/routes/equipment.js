@@ -331,7 +331,7 @@ router.put('/models/:id/specs',
         const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value]);
         await conn.query(
           `INSERT INTO equipment_model_specs (model_id, spec_key, spec_value, created_at, updated_at, gym_id)
-           VALUES ${rows.map(() => '(?,?,?,NOW(),NOW(), ?)').join(',')}`,
+           VALUES ${rows.map(() => '(?,?,?,NOW(),NOW(),?)').join(',')}`,
           rows.flat()
         );
       }
