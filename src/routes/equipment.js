@@ -256,7 +256,7 @@ router.patch('/models/:id',
   [ param('id').isInt() ],
   asyncH(async (req, res) => {
     const { id } = req.params;
-    const allowed = ['category_id','brand','model_name','sku','description','photo_url','is_track_per_item', 'gym_id'];
+    const allowed = ['category_id','brand','model_name','sku','description','photo_url','is_track_per_item'];
     const sets = []; const pr = [];
     for (const k of allowed) {
       if (req.body[k] !== undefined) {
@@ -330,7 +330,7 @@ router.put('/models/:id/specs',
       if (specs.length) {
         const rows = specs.filter(s => s.spec_key && s.spec_value).map(s => [id, s.spec_key, s.spec_value]);
         await conn.query(
-          `INSERT INTO equipment_model_specs (model_id, spec_key, spec_value, created_at, updated_at)
+          `INSERT INTO equipment_model_specs (model_id, spec_key, spec_value, created_at, updated_at, gym_id)
            VALUES ${rows.map(() => '(?,?,?,NOW(),NOW())').join(',')}`,
           rows.flat()
         );
