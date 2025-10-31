@@ -119,6 +119,11 @@ router.delete('/categories/:id',
     const { id } = req.params;
     await pool.query(`DELETE FROM equipment_categories WHERE id=?`, [id]);
 
+        const [[toDelete]] = await pool.query(
+      `SELECT * FROM equipment_categories WHERE id=?`,
+      [id]
+    );
+
     const payload = {
       action: 'delete',
       entity: 'equipment_category',
