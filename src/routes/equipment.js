@@ -56,7 +56,7 @@ router.post('/categories',
   asyncH(async (req, res) => {
     const v = validationResult(req); if (!v.isEmpty()) return bad(res, v.array());
     const { name, parent_id = null, gym_id } = req.body;
-    const r = await pool.query(
+    const [r] = await pool.query(
       `INSERT INTO equipment_categories (name, parent_id, created_at, updated_at, gym_id)
        VALUES (?, ?, NOW(), NOW(), ?)`,
       [name, parent_id, gym_id]
